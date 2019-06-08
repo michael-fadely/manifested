@@ -10,8 +10,6 @@ import std.stdio;
 import std.string : replace, split, splitLines;
 import std.uni : sicmp;
 
-import manifested.windows;
-
 /// Finds the first element in a range that matches `pred`, or returns `null`
 auto firstOrDefault(alias pred, R)(R r) if (isInputRange!R)
 {
@@ -152,7 +150,7 @@ public class ManifestGenerator
 		ManifestEntry[] result;
 
 		string[] fileIndex = dirEntries(modPath, SpanMode.breadth)
-		                     .filter!(x => !x.empty &&
+		                     .filter!(x => !x.empty && x.isFile &&
 		                              baseName(x) != ".manifest" &&
 		                              baseName(x) != ".version")
 		                     .map!(x => cast(string)x)
@@ -163,7 +161,7 @@ public class ManifestGenerator
 			return result;
 		}
 
-		// OnFilesIndexed(new FilesIndexedEventArgs(fileIndex.length));
+		//OnFilesIndexed(new FilesIndexedEventArgs(fileIndex.length));
 
 		int index = 0;
 
@@ -174,23 +172,23 @@ public class ManifestGenerator
 
 			++index;
 
-			// auto args = new FileHashEventArgs(relativePath, index, fileIndex.length);
-			// OnFileHashStart(args);
+			//auto args = new FileHashEventArgs(relativePath, index, fileIndex.length);
+			//OnFileHashStart(args);
 
-			// if (args.Cancel)
-			// {
-			// 	return null;
-			// }
+			//if (args.Cancel)
+			//{
+			//	return null;
+			//}
 
 			string hash = GetFileHash(f);
 
-			// args = new FileHashEventArgs(relativePath, index, fileIndex.length);
-			// OnFileHashEnd(args);
+			//args = new FileHashEventArgs(relativePath, index, fileIndex.length);
+			//OnFileHashEnd(args);
 
-			// if (args.Cancel)
-			// {
-			// 	return null;
-			// }
+			//if (args.Cancel)
+			//{
+			//	return null;
+			//}
 
 			result ~= new ManifestEntry(relativePath, file.length, hash);
 		}
@@ -217,6 +215,8 @@ public class ManifestGenerator
 
 		version (Windows)
 		{
+			import manifested.windows;
+
 			string reparsed;
 
 			try
@@ -337,16 +337,16 @@ public class ManifestGenerator
 
 			++index;
 
-			// auto args = new FileHashEventArgs(m.FilePath, index, manifest.length);
-			// OnFileHashStart(args);
+			//auto args = new FileHashEventArgs(m.FilePath, index, manifest.length);
+			//OnFileHashStart(args);
 
-			// if (args.Cancel)
-			// {
-			// 	return null;
-			// }
+			//if (args.Cancel)
+			//{
+			//	return null;
+			//}
 
-			try
-			{
+			//try
+			//{
 				if (!exists(filePath))
 				{
 					result ~= new ManifestDiff(ManifestState.Removed, m, null);
@@ -379,17 +379,17 @@ public class ManifestGenerator
 				}
 
 				result ~= new ManifestDiff(ManifestState.Unchanged, m, null);
-			}
-			finally
-			{
-				// args = new FileHashEventArgs(m.FilePath, index, manifest.length);
-				// OnFileHashEnd(args);
-			}
+			//}
+			//finally
+			//{
+				//args = new FileHashEventArgs(m.FilePath, index, manifest.length);
+				//OnFileHashEnd(args);
+			//}
 
-			// if (args.Cancel)
-			// {
-			// 	return null;
-			// }
+			//if (args.Cancel)
+			//{
+			//	return null;
+			//}
 		}
 
 		return result;
