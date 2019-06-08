@@ -163,7 +163,7 @@ public class ManifestGenerator
 
 		//OnFilesIndexed(new FilesIndexedEventArgs(fileIndex.length));
 
-		int index = 0;
+		size_t index;
 
 		foreach (string f; fileIndex)
 		{
