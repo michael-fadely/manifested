@@ -33,27 +33,27 @@ public enum ManifestState
 	 * \brief 
 	 * The file is unchanged.
 	 */
-	Unchanged,
+	unchanged,
 	/**
 	 * \brief 
 	 * Indicates that a file has been moved, renamed, or both.
 	 */
-	Moved,
+	moved,
 	/**
 	 * \brief 
 	 * The file has been modified in some way.
 	 */
-	Changed,
+	changed,
 	/**
 	 * \brief 
 	 * The file has been added to the new manifest.
 	 */
-	Added,
+	added,
 	/**
 	 * \brief 
 	 * The file has been removed from the new manifest.
 	 */
-	Removed
+	removed
 }
 
 /**
@@ -68,23 +68,23 @@ public class ManifestDiff
 	 * The state of the file.
 	 * \sa ManifestState
 	 */
-	public ManifestState State;
+	public ManifestState state;
 	/**
 	 * \brief 
 	 * The newer of the two entries.
 	 */
-	public ManifestEntry Current;
+	public ManifestEntry current;
 	/**
 	 * \brief 
 	 * The older of the two entries.
 	 */
-	public ManifestEntry Last;
+	public ManifestEntry last;
 
 	public this(ManifestState state, ManifestEntry current, ManifestEntry last)
 	{
-		State   = state;
-		Current = current;
-		Last    = last;
+		this.state   = state;
+		this.current = current;
+		this.last    = last;
 	}
 }
 
@@ -140,7 +140,7 @@ public class ManifestGenerator
 	 * \param modPath The path to the directory.
 	 * \return An array of \sa ManifestEntry.
 	 */
-	public ManifestEntry[] Generate(string modPath)
+	public ManifestEntry[] generate(string modPath)
 	{
 		if (!exists(modPath))
 		{
@@ -168,7 +168,7 @@ public class ManifestGenerator
 		foreach (string f; fileIndex)
 		{
 			string relativePath = f[modPath.length + 1 .. $];
-			DirEntry file = GetFileInfo(f);
+			DirEntry file = getFileInfo(f);
 
 			++index;
 
@@ -180,7 +180,7 @@ public class ManifestGenerator
 			//	return null;
 			//}
 
-			string hash = GetFileHash(f);
+			string hash = getFileHash(f);
 
 			//args = new FileHashEventArgs(relativePath, index, fileIndex.length);
 			//OnFileHashEnd(args);
@@ -198,11 +198,11 @@ public class ManifestGenerator
 
 	/**
 	 * \brief 
-	 * Follows symbolic links and constructs a \sa FileInfo of the actual file.
+	 * Follows symbolic links and constructs a \sa DirEntry of the actual file.
 	 * \param path Path to the file.
 	 * \return The  of the real file.
 	 */
-	private static DirEntry GetFileInfo(string path)
+	private static DirEntry getFileInfo(string path)
 	{
 		auto file = DirEntry(path);
 
@@ -249,7 +249,7 @@ public class ManifestGenerator
 	 * \param oldManifest The old manifest.
 	 * \return A list of \sa ManifestDiff containing change information.
 	 */
-	public static ManifestDiff[] Diff(ManifestEntry[] newManifest, ManifestEntry[] oldManifest)
+	public static ManifestDiff[] diff(ManifestEntry[] newManifest, ManifestEntry[] oldManifest)
 	{
 		// TODO: handle copies instead of moves to reduce download requirements (or cache downloads by hash?)
 
@@ -270,12 +270,12 @@ public class ManifestGenerator
 			if (exact !is null)
 			{
 				old = old.remove!(x => x == exact);
-				result ~= new ManifestDiff(ManifestState.Unchanged, entry, null);
+				result ~= new ManifestDiff(ManifestState.unchanged, entry, null);
 				continue;
 			}
 
 			// There's no exact match, so let's search by checksum.
-			ManifestEntry[] checksum = old.filter!(x => !sicmp(x.Checksum, entry.Checksum)).array;
+			ManifestEntry[] checksum = old.filter!(x => !sicmp(x.checksum, entry.checksum)).array;
 
 			// If we've found matching checksums, we then need to check
 			// the file path to see if it's been moved.
@@ -286,34 +286,34 @@ public class ManifestGenerator
 					old = old.remove!(x => x == c);
 				}
 
-				if (checksum.all!(x => x.FilePath != entry.FilePath))
+				if (checksum.all!(x => x.filePath != entry.filePath))
 				{
-					const tbd = old.firstOrDefault!(x => !sicmp(x.FilePath, entry.FilePath));
+					const tbd = old.firstOrDefault!(x => !sicmp(x.filePath, entry.filePath));
 
 					old = old.remove!(x => x == tbd);
-					result ~= new ManifestDiff(ManifestState.Moved, entry, checksum[0]);
+					result ~= new ManifestDiff(ManifestState.moved, entry, checksum[0]);
 					continue;
 				}
 			}
 
 			// If we've made it here, there's no matching checksums, so let's search
 			// for matching paths. If a path matches, the file has been modified.
-			ManifestEntry nameMatch = old.firstOrDefault!(x => !sicmp(x.FilePath, entry.FilePath));
+			ManifestEntry nameMatch = old.firstOrDefault!(x => !sicmp(x.filePath, entry.filePath));
 			if (nameMatch !is null)
 			{
 				old = old.remove!(x => x == nameMatch);
-				result ~= new ManifestDiff(ManifestState.Changed, entry, nameMatch);
+				result ~= new ManifestDiff(ManifestState.changed, entry, nameMatch);
 				continue;
 			}
 
 			// In every other case, this file is newly added.
-			result ~= new ManifestDiff(ManifestState.Added, entry, null);
+			result ~= new ManifestDiff(ManifestState.added, entry, null);
 		}
 
 		// All files that are still unique to the old manifest should be marked for removal.
 		if (old.length > 0)
 		{
-			result ~= old.map!(x => new ManifestDiff(ManifestState.Removed, x, null)).array;
+			result ~= old.map!(x => new ManifestDiff(ManifestState.removed, x, null)).array;
 		}
 
 		return result;
@@ -326,18 +326,18 @@ public class ManifestGenerator
 	 * \param manifest Manifest to check against.
 	 * \return A list of \sa ManifestDiff containing change information.
 	 */
-	public ManifestDiff[] Verify(string modPath, ManifestEntry[] manifest)
+	public ManifestDiff[] verify(string modPath, ManifestEntry[] manifest)
 	{
 		ManifestDiff[] result;
 		size_t index;
 
 		foreach (ManifestEntry m; manifest)
 		{
-			string filePath = buildNormalizedPath(modPath, m.FilePath);
+			string filePath = buildNormalizedPath(modPath, m.filePath);
 
 			++index;
 
-			//auto args = new FileHashEventArgs(m.FilePath, index, manifest.length);
+			//auto args = new FileHashEventArgs(m.filePath, index, manifest.length);
 			//OnFileHashStart(args);
 
 			//if (args.Cancel)
@@ -349,7 +349,7 @@ public class ManifestGenerator
 			//{
 				if (!exists(filePath))
 				{
-					result ~= new ManifestDiff(ManifestState.Removed, m, null);
+					result ~= new ManifestDiff(ManifestState.removed, m, null);
 					continue;
 				}
 
@@ -357,32 +357,32 @@ public class ManifestGenerator
 
 				try
 				{
-					info = GetFileInfo(filePath);
+					info = getFileInfo(filePath);
 				}
 				catch (FileException)
 				{
-					result ~= new ManifestDiff(ManifestState.Removed, m, null);
+					result ~= new ManifestDiff(ManifestState.removed, m, null);
 					continue;
 				}
 
-				if (info.size != m.FileSize)
+				if (info.size != m.fileSize)
 				{
-					result ~= new ManifestDiff(ManifestState.Changed, m, null);
+					result ~= new ManifestDiff(ManifestState.changed, m, null);
 					continue;
 				}
 
-				string hash = GetFileHash(filePath);
-				if (!sicmp(hash, m.Checksum))
+				string hash = getFileHash(filePath);
+				if (sicmp(hash, m.checksum))
 				{
-					result ~= new ManifestDiff(ManifestState.Changed, m, null);
+					result ~= new ManifestDiff(ManifestState.changed, m, null);
 					continue;
 				}
 
-				result ~= new ManifestDiff(ManifestState.Unchanged, m, null);
+				result ~= new ManifestDiff(ManifestState.unchanged, m, null);
 			//}
 			//finally
 			//{
-				//args = new FileHashEventArgs(m.FilePath, index, manifest.length);
+				//args = new FileHashEventArgs(m.filePath, index, manifest.length);
 				//OnFileHashEnd(args);
 			//}
 
@@ -401,7 +401,7 @@ public class ManifestGenerator
 	 * \param filePath Path to the file to hash.
 	 * \return Lowercase string representation of the hash.
 	 */
-	public static string GetFileHash(string filePath)
+	public static string getFileHash(string filePath)
 	{
 		import std.digest.sha;
 
@@ -454,7 +454,7 @@ public static class Manifest
 	 * \param filePath The path to the mod manifest file.
 	 * \return List of \sa ManifestEntry
 	 */
-	public static ManifestEntry[] FromFile(string filePath)
+	public static ManifestEntry[] fromFile(string filePath)
 	{
 		string[] lines = readText(filePath).splitLines();
 		return lines.map!(line => new ManifestEntry(line)).array;
@@ -466,7 +466,7 @@ public static class Manifest
 	 * \param str The mod manifest file string to parse.
 	 * \return List of \sa ManifestEntry
 	 */
-	public static ManifestEntry[] FromString(string str)
+	public static ManifestEntry[] fromString(string str)
 	{
 		string[] lines = str.splitLines();
 		return lines.map!(line => new ManifestEntry(line)).array;
@@ -478,7 +478,7 @@ public static class Manifest
 	 * \param manifest The manifest to write.
 	 * \param filePath The file to write the manifest to.
 	 */
-	public static void ToFile(R)(R manifest, string filePath)
+	public static void toFile(R)(R manifest, string filePath)
 		if (isForwardRange!R && is(ElementType!R == ManifestEntry))
 	{
 		write(filePath, join(manifest.map!(x => x.toString()), "\r\n"));
@@ -495,17 +495,17 @@ public class ManifestEntry
 	 * \brief 
 	 * The name/path of the file relative to the root of the mod directory.
 	 */
-	public string FilePath;
+	public string filePath;
 	/**
 	 * \brief 
 	 * The size of the file in bytes.
 	 */
-	public const long FileSize;
+	public const long fileSize;
 	/**
 	 * \brief 
 	 * String representation of the SHA-256 checksum of the file.
 	 */
-	public const string Checksum;
+	public const string checksum;
 
 	/**
 	 * \brief 
@@ -522,25 +522,25 @@ public class ManifestEntry
 		import std.conv : to;
 		enforce(fields.length == 3, "Manifest line must have 3 fields. Provided: " ~ to!string(fields.length));
 
-		FilePath = fields[0];
-		FileSize = to!long(fields[1]);
-		Checksum = fields[2];
+		this.filePath = fields[0];
+		this.fileSize = to!long(fields[1]);
+		this.checksum = fields[2];
 
-		enforce(!isRooted(FilePath), "Absolute paths are forbidden: " ~ FilePath);
-		enforce(!line.canFind(`..\`) && !line.canFind(`\..\`), "Parent directory traversal is forbidden: " ~ FilePath);
+		enforce(!isRooted(this.filePath), "Absolute paths are forbidden: " ~ this.filePath);
+		enforce(!line.canFind(`..\`) && !line.canFind(`\..\`), "Parent directory traversal is forbidden: " ~ this.filePath);
 	}
 
 	public this(string filePath, long fileSize, string checksum)
 	{
-		FilePath = filePath;
-		FileSize = fileSize;
-		Checksum = checksum;
+		this.filePath = filePath;
+		this.fileSize = fileSize;
+		this.checksum = checksum;
 	}
 
 	public override string toString() const
 	{
 		import std.format : format;
-		return format!("%s\t%u\t%s")(FilePath, FileSize, Checksum);
+		return format!("%s\t%u\t%s")(filePath, fileSize, checksum);
 	}
 
 	public override bool opEquals(Object obj) const
@@ -557,16 +557,16 @@ public class ManifestEntry
 			return false;
 		}
 
-		return FileSize == m.FileSize &&
-		       !sicmp(FilePath, m.FilePath) &&
-		       !sicmp(Checksum, m.Checksum);
+		return fileSize == m.fileSize &&
+		       !sicmp(filePath, m.filePath) &&
+		       !sicmp(checksum, m.checksum);
 	}
 
 	public override size_t toHash()
 	{
-		size_t hashCode = hashOf(FilePath);
-		hashCode = FileSize.hashOf(hashCode);
-		hashCode = Checksum.hashOf(hashCode);
+		size_t hashCode = hashOf(filePath);
+		hashCode = fileSize.hashOf(hashCode);
+		hashCode = checksum.hashOf(hashCode);
 		return hashCode;
 	}
 }
