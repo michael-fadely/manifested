@@ -15,7 +15,7 @@ private auto firstOrDefault(alias pred, R)(R r) if (isInputRange!R)
 {
 	auto search = r.find!(pred)();
 
-	if (search)
+	if (!search.empty)
 	{
 		return search.takeOne.front;
 	}
