@@ -329,7 +329,7 @@ public class ManifestGenerator
 	public ManifestDiff[] Verify(string modPath, ManifestEntry[] manifest)
 	{
 		ManifestDiff[] result;
-		int index = 0;
+		size_t index;
 
 		foreach (ManifestEntry m; manifest)
 		{
