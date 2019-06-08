@@ -11,7 +11,7 @@ import std.string : replace, split, splitLines;
 import std.uni : sicmp;
 
 /// Finds the first element in a range that matches `pred`, or returns `null`
-auto firstOrDefault(alias pred, R)(R r) if (isInputRange!R)
+private auto firstOrDefault(alias pred, R)(R r) if (isInputRange!R)
 {
 	auto search = r.find!(pred)();
 
