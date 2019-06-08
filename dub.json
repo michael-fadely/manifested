@@ -1,0 +1,9 @@
+{
+	"authors": [
+		"Michael Fadely"
+	],
+	"copyright": "Copyright © 2019, Michael Fadely",
+	"description": "File manifest generator.",
+	"license": "MIT",
+	"name": "manifested"
+}

@@ -1,0 +1,15 @@
+.dub
+docs.json
+__dummy.html
+docs/
+/manifested
+manifested.so
+manifested.dylib
+manifested.dll
+manifested.a
+manifested.lib
+manifested-test-*
+*.exe
+*.o
+*.obj
+*.lst
