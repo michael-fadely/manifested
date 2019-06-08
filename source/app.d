@@ -4,6 +4,8 @@ import manifested;
 
 int main(string[] args)
 {
+	string inPath;
+
 	try
 	{
 		auto result = getopt(args,
@@ -21,5 +23,13 @@ int main(string[] args)
 		return -1;
 	}
 
-	
+	auto generator = new ManifestGenerator();
+	auto manifest = generator.Generate(inPath);
+
+	foreach (entry; manifest)
+	{
+		stdout.writeln(entry);
+	}
+
+	return 0;
 }
