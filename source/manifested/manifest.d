@@ -190,7 +190,7 @@ public class ManifestGenerator
 			//	return null;
 			//}
 
-			result ~= new ManifestEntry(relativePath, file.length, hash);
+			result ~= new ManifestEntry(relativePath, file.size, hash);
 		}
 
 		return result;
@@ -365,7 +365,7 @@ public class ManifestGenerator
 					continue;
 				}
 
-				if (info.length != m.FileSize)
+				if (info.size != m.FileSize)
 				{
 					result ~= new ManifestDiff(ManifestState.Changed, m, null);
 					continue;
