@@ -1,0 +1,15 @@
+.dub
+docs.json
+__dummy.html
+docs/
+/manifested-manager
+manifested-manager.so
+manifested-manager.dylib
+manifested-manager.dll
+manifested-manager.a
+manifested-manager.lib
+manifested-manager-test-*
+*.exe
+*.o
+*.obj
+*.lst
