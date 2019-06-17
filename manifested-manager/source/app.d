@@ -142,17 +142,18 @@ void printDiff(ManifestDiff[] diff)
 	{
 		final switch (entry.state)
 		{
+			// impossible, but `final switch`
 			case ManifestState.unchanged:
 				continue;
 
 			case ManifestState.added:
 			case ManifestState.changed:
 			case ManifestState.removed:
-				stdout.writeln(entry.state, ": ", entry.current.filePath);
+				stdout.writeln(entry.state, `: "`, entry.current.filePath, `"`);
 				break;
 
 			case ManifestState.moved:
-				stdout.writeln(entry.state, ": ", entry.last.filePath, " -> ", entry.current.filePath);
+				stdout.writeln(entry.state, `: "`, entry.last.filePath, `" -> "`, entry.current.filePath, `"`);
 				break;
 		}
 	}
@@ -202,7 +203,7 @@ bool applyManifest(string sourcePath, string targetPath)
 
 			case ManifestState.added:
 			case ManifestState.changed:
-				stdout.writeln(entry.state, ": ", entry.current.filePath);
+				stdout.writeln(entry.state, `: "`, entry.current.filePath, `"`);
 
 				auto sourceFile = buildNormalizedPath(sourcePath, entry.current.filePath);
 				auto targetFile = buildNormalizedPath(targetPath, entry.current.filePath);
@@ -218,15 +219,15 @@ bool applyManifest(string sourcePath, string targetPath)
 				break;
 
 			case ManifestState.removed:
-				stdout.writeln(entry.state, ": ", entry.current.filePath);
+				stdout.writeln(entry.state, `: "`, entry.current.filePath, `"`);
 
 				remove(buildNormalizedPath(targetPath, entry.current.filePath));
 				break;
 
 			case ManifestState.moved:
-				stdout.writeln(entry.state, ": ", entry.last.filePath, " -> ", entry.current.filePath);
+				stdout.writeln(entry.state, `: "`, entry.last.filePath, `" -> "`, entry.current.filePath, `"`);
 
-				auto from = buildNormalizedPath(targetPath, entry.current.filePath);
+				auto from = buildNormalizedPath(targetPath, entry.last.filePath);
 				auto to   = buildNormalizedPath(targetPath, entry.current.filePath);
 
 				auto toDir = dirName(to);
