@@ -1,15 +1,42 @@
-import std;
+import std.algorithm;
+import std.array;
+import std.conv;
+import std.exception;
+import std.file;
+import std.getopt;
+import std.path;
+import std.stdio;
 
 import manifested;
 
+enum Operation
+{
+	/// Invalid mode.
+	none,
+	/// Generate a manifest for a given source directory.
+	generate,
+	/// Verify file integrity according to the manifested directory.
+	verify,
+	/// Compare two manifested directories.
+	compare,
+	/// Update target directory to match source directory's manifest.
+	apply,
+
+	// TODO: clean - remove unversioned files
+}
+
 int main(string[] args)
 {
-	string inPath;
+	Operation mode;
+	string sourcePath;
+	string targetPath;
 
 	try
 	{
 		auto result = getopt(args,
-		                     "i|input", "Input directory", &inPath);
+		                     "m|mode",   "Operation to perform.", &mode,
+		                     "s|source", "Source directory.",     &sourcePath,
+		                     "t|target", "Target directory.",     &targetPath);
 
 		if (result.helpWanted)
 		{
@@ -23,60 +50,196 @@ int main(string[] args)
 		return -1;
 	}
 
-	auto generator = new ManifestGenerator();
-	auto manA = Manifest.fromFile(buildNormalizedPath(inPath, "a.manifest"));
-	auto manB = generator.generate(inPath);
-	auto diff = generator.diff(manB, manA);
-
-	foreach (entry; diff.filter!(x => x.state != ManifestState.unchanged))
+	try
 	{
-		auto last = entry.last;
-		auto current = entry.current;
-
-		if (last !is null && current !is null &&
-		    last.filePath != current.filePath)
+		if (!sourcePath.empty)
 		{
-			writeln(entry.last.filePath, " -> ", entry.current.filePath, ": ", entry.state);
+			enforce(exists(sourcePath), "Source path does not exist.");
 		}
-		else
+
+		if (!targetPath.empty)
 		{
-			auto e = last is null ? current : last;
-			writeln(e.filePath, ": ", entry.state);
+			enforce(exists(targetPath), "Target path does not exist.");
+		}
+
+		final switch (mode) with (Operation)
+		{
+			case none:
+				stderr.writeln("Invalid operation mode specified.");
+				return -2;
+
+			case generate:
+				enforce(!sourcePath.empty, "Source directory must be specified to generate a manifest.");
+				if (!generateManifest(sourcePath))
+				{
+					return -3;
+				}
+
+				break;
+
+			case verify:
+				enforce(!sourcePath.empty, "Source directory must be specified to verify a manifest.");
+
+				if (!verifyManifest(sourcePath))
+				{
+					return -4;
+				}
+
+				break;
+
+			case compare:
+				enforce(!sourcePath.empty && !targetPath.empty,
+				        "Source and target directories must both be specified for operation mode " ~ to!string(mode));
+
+				if (!compareManifests(sourcePath, targetPath))
+				{
+					return -5;
+				}
+
+				break;
+
+			case apply:
+				enforce(!sourcePath.empty && !targetPath.empty,
+				        "Source and target directories must both be specified for operation mode " ~ to!string(mode));
+
+				if (!applyManifest(sourcePath, targetPath))
+				{
+					return -6;
+				}
+
+				break;
 		}
 	}
-
-	/*
-	auto generator = new ManifestGenerator();
-	auto manifest = generator.generate(inPath);
-
-	foreach (entry; manifest)
+	catch (Exception ex)
 	{
-		stdout.writeln(entry);
+		stderr.writeln(ex.msg);
+		return -1;
 	}
-	*/
-
-	/*
-
-	auto diff = generator.verify(inPath, manifest);
-	auto modifications = diff.filter!(x => x.state != ManifestState.unchanged);
-
-	foreach (entry; modifications)
-	{
-		auto last = entry.last;
-		auto current = entry.current;
-
-		if (last !is null && current !is null && last.filePath != current.filePath)
-		{
-			writeln(entry.last.filePath, " -> ", entry.current.filePath, ": ", entry.state);
-		}
-		else
-		{
-			auto e = last is null ? current : last;
-			writeln(e.filePath, ": ", entry.state);
-		}
-	}
-
-	*/
 
 	return 0;
+}
+
+private:
+
+const manifestFileName = ".manifest";
+
+bool generateManifest(string sourcePath)
+{
+	auto generator = new ManifestGenerator();
+	auto manifest = generator.generate(sourcePath);
+	Manifest.toFile(manifest, buildNormalizedPath(sourcePath, manifestFileName));
+	return true;
+}
+
+void printDiff(ManifestDiff[] diff)
+{
+	if (diff.empty)
+	{
+		stdout.writeln("no change");
+	}
+
+	foreach (ManifestDiff entry; diff.filter!(x => x.state != ManifestState.unchanged))
+	{
+		final switch (entry.state)
+		{
+			case ManifestState.unchanged:
+				continue;
+
+			case ManifestState.added:
+			case ManifestState.changed:
+			case ManifestState.removed:
+				stdout.writeln(entry.state, ": ", entry.current.filePath);
+				break;
+
+			case ManifestState.moved:
+				stdout.writeln(entry.state, ": ", entry.last.filePath, " -> ", entry.current.filePath);
+				break;
+		}
+	}
+}
+
+bool verifyManifest(string sourcePath)
+{
+	auto generator = new ManifestGenerator();
+	auto manifest = Manifest.fromFile(sourcePath);
+	auto diff = generator.verify(sourcePath, manifest);
+
+	printDiff(diff);
+
+	return true;
+}
+
+bool compareManifests(string sourcePath, string targetPath)
+{
+	auto sourceManifest = Manifest.fromFile(buildNormalizedPath(sourcePath, manifestFileName));
+	auto targetManifest = Manifest.fromFile(buildNormalizedPath(targetPath, manifestFileName));
+
+	auto generator = new ManifestGenerator();
+	auto diff = generator.diff(sourceManifest, targetManifest);
+
+	printDiff(diff);
+
+	return true;
+}
+
+bool applyManifest(string sourcePath, string targetPath)
+{
+	auto sourceManifest = Manifest.fromFile(buildNormalizedPath(sourcePath, manifestFileName));
+	auto targetManifest = Manifest.fromFile(buildNormalizedPath(targetPath, manifestFileName));
+
+	auto generator = new ManifestGenerator();
+	auto diff = generator.diff(sourceManifest, targetManifest);
+
+	// TODO: track empty dirs, remove if empty (with consideration for untracked files)
+
+	foreach (ManifestDiff entry; diff.filter!(x => x.state != ManifestState.unchanged))
+	{
+		final switch (entry.state)
+		{
+			// impossible, but `final switch`
+			case ManifestState.unchanged:
+				continue;
+
+			case ManifestState.added:
+			case ManifestState.changed:
+				stdout.writeln(entry.state, ": ", entry.current.filePath);
+
+				auto sourceFile = buildNormalizedPath(sourcePath, entry.current.filePath);
+				auto targetFile = buildNormalizedPath(targetPath, entry.current.filePath);
+
+				auto targetDir = dirName(targetFile);
+
+				if (!exists(targetDir))
+				{
+					mkdirRecurse(targetDir);
+				}
+
+				copy(sourceFile, targetFile);
+				break;
+
+			case ManifestState.removed:
+				stdout.writeln(entry.state, ": ", entry.current.filePath);
+
+				remove(buildNormalizedPath(targetPath, entry.current.filePath));
+				break;
+
+			case ManifestState.moved:
+				stdout.writeln(entry.state, ": ", entry.last.filePath, " -> ", entry.current.filePath);
+
+				auto from = buildNormalizedPath(targetPath, entry.current.filePath);
+				auto to   = buildNormalizedPath(targetPath, entry.current.filePath);
+
+				auto toDir = dirName(to);
+
+				if (!exists(toDir))
+				{
+					mkdirRecurse(toDir);
+				}
+
+				rename(from, to);
+				break;
+		}
+	}
+
+	return false;
 }
