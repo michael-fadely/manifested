@@ -10,6 +10,8 @@ import std.stdio;
 import std.string : replace, split, splitLines;
 import std.uni : sicmp;
 
+import symlinkd.symlink;
+
 /// Finds the first element in a range that matches `pred`, or returns `null`
 private auto firstOrDefault(alias pred, R)(R r) if (isInputRange!R)
 {
@@ -162,14 +164,14 @@ public class ManifestGenerator
 
 		//OnFilesIndexed(new FilesIndexedEventArgs(fileIndex.length));
 
-		size_t index;
+		//size_t index;
 
 		foreach (string f; fileIndex)
 		{
 			string relativePath = f[dirPath.length + 1 .. $];
 			DirEntry file = getFileInfo(f);
 
-			++index;
+			//++index;
 
 			//auto args = new FileHashEventArgs(relativePath, index, fileIndex.length);
 			//OnFileHashStart(args);
@@ -205,40 +207,29 @@ public class ManifestGenerator
 	{
 		auto file = DirEntry(path);
 
-		// TODO: Posix: readLink; Windows: Windows API as below
-
 		if (!file.isSymlink)
 		{
 			return file;
 		}
 
-		version (Windows)
+		string reparsed = readSymlink(path);
+
+		if (reparsed.empty)
 		{
-			import manifested.windows;
-
-			string reparsed;
-
-			try
+			version (Windows)
 			{
-				reparsed = getFinalPathName(path);
-			}
-			catch (Win32Exception ex)
-			{
-				if (ex.errorCode == 2)
+				import core.sys.windows.windows : GetLastError;
+
+				if (GetLastError() == 2)
 				{
 					throw new FileException(path, "Symlinked file not found!");
 				}
-
-				throw ex;
 			}
 
-			file = DirEntry(reparsed.replace(`\\?\`, ""));
-			return file;
+			throw new FileException(path, "Failed to read symlink target.");
 		}
-		else
-		{
-			return DirEntry(readLink(path));
-		}
+
+		return DirEntry(reparsed);
 	}
 
 	/**
@@ -253,10 +244,9 @@ public class ManifestGenerator
 		// TODO: handle copies instead of moves to reduce download requirements (or cache downloads by hash?)
 
 		ManifestDiff[] result;
-
 		ManifestEntry[] old;
 
-		if (oldManifest != null && oldManifest.length > 0)
+		if (oldManifest !is null && oldManifest.length > 0)
 		{
 			old = oldManifest.dup;
 		}
@@ -298,7 +288,7 @@ public class ManifestGenerator
 			// If we've made it here, there's no matching checksums, so let's search
 			// for matching paths. If a path matches, the file has been modified.
 			ManifestEntry nameMatch = old.firstOrDefault!(x => !sicmp(x.filePath, entry.filePath));
-			
+
 			if (nameMatch !is null)
 			{
 				old = old.remove!(x => x == nameMatch);
@@ -329,13 +319,12 @@ public class ManifestGenerator
 	public ManifestDiff[] verify(string dirPath, ManifestEntry[] manifest)
 	{
 		ManifestDiff[] result;
-		size_t index;
 
 		foreach (ManifestEntry m; manifest)
 		{
 			string filePath = buildNormalizedPath(dirPath, m.filePath);
 
-			++index;
+			//++index;
 
 			//auto args = new FileHashEventArgs(m.filePath, index, manifest.length);
 			//OnFileHashStart(args);
@@ -372,6 +361,7 @@ public class ManifestGenerator
 				}
 
 				string hash = getFileHash(filePath);
+				
 				if (sicmp(hash, m.checksum))
 				{
 					result ~= new ManifestDiff(ManifestState.changed, m, null);
@@ -422,7 +412,7 @@ public class ManifestGenerator
 /*
 	private void OnFilesIndexed(FilesIndexedEventArgs e)
 	{
-		if (FilesIndexed != null)
+		if (FilesIndexed !is null)
 		{
 			FilesIndexed.Invoke(this, e);
 		}
@@ -430,7 +420,7 @@ public class ManifestGenerator
 
 	private void OnFileHashStart(FileHashEventArgs e)
 	{
-		if (FileHashStart != null)
+		if (FileHashStart !is null)
 		{
 			FileHashStart.Invoke(this, e);
 		}
@@ -438,7 +428,7 @@ public class ManifestGenerator
 
 	private void OnFileHashEnd(FileHashEventArgs e)
 	{
-		if (FileHashEnd != null)
+		if (FileHashEnd !is null)
 		{
 			FileHashEnd.Invoke(this, e);
 		}
@@ -562,7 +552,7 @@ public class ManifestEntry
 		       !sicmp(checksum, m.checksum);
 	}
 
-	public override size_t toHash()
+	public override size_t toHash() const
 	{
 		size_t hashCode = hashOf(filePath);
 		hashCode = fileSize.hashOf(hashCode);

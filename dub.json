@@ -5,5 +5,8 @@
 	"copyright": "Copyright © 2019, Michael Fadely",
 	"description": "File manifest generator.",
 	"license": "MIT",
-	"name": "manifested"
+	"name": "manifested",
+	"dependencies": {
+		"symlinkd": "~>1.0.0"
+	}
 }
