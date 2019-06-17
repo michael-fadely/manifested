@@ -151,8 +151,7 @@ public class ManifestGenerator
 
 		string[] fileIndex = dirEntries(modPath, SpanMode.breadth)
 		                     .filter!(x => !x.empty && x.isFile &&
-		                              baseName(x) != ".manifest" &&
-		                              baseName(x) != ".version")
+		                              baseName(x) != ".manifest")
 		                     .map!(x => cast(string)x)
 		                     .array;
 
@@ -299,6 +298,7 @@ public class ManifestGenerator
 			// If we've made it here, there's no matching checksums, so let's search
 			// for matching paths. If a path matches, the file has been modified.
 			ManifestEntry nameMatch = old.firstOrDefault!(x => !sicmp(x.filePath, entry.filePath));
+			
 			if (nameMatch !is null)
 			{
 				old = old.remove!(x => x == nameMatch);
@@ -481,7 +481,7 @@ public static class Manifest
 	public static void toFile(R)(R manifest, string filePath)
 		if (isForwardRange!R && is(ElementType!R == ManifestEntry))
 	{
-		write(filePath, join(manifest.map!(x => x.toString()), "\r\n"));
+		std.file.write(filePath, join(manifest.map!(x => x.toString()), "\n"));
 	}
 }
 
