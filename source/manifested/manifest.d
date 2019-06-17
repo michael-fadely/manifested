@@ -137,19 +137,19 @@ public class ManifestGenerator
 	/**
 	 * \brief 
 	 * Generates a manifest for a given directory hierarchy.
-	 * \param modPath The path to the directory.
+	 * \param dirPath The path to the directory.
 	 * \return An array of \sa ManifestEntry.
 	 */
-	public ManifestEntry[] generate(string modPath)
+	public ManifestEntry[] generate(string dirPath)
 	{
-		if (!exists(modPath))
+		if (!exists(dirPath))
 		{
-			throw new DirectoryNotFoundException(modPath);
+			throw new DirectoryNotFoundException(dirPath);
 		}
 
 		ManifestEntry[] result;
 
-		string[] fileIndex = dirEntries(modPath, SpanMode.breadth)
+		string[] fileIndex = dirEntries(dirPath, SpanMode.breadth)
 		                     .filter!(x => !x.empty && x.isFile &&
 		                              baseName(x) != ".manifest")
 		                     .map!(x => cast(string)x)
@@ -166,7 +166,7 @@ public class ManifestGenerator
 
 		foreach (string f; fileIndex)
 		{
-			string relativePath = f[modPath.length + 1 .. $];
+			string relativePath = f[dirPath.length + 1 .. $];
 			DirEntry file = getFileInfo(f);
 
 			++index;
@@ -322,18 +322,18 @@ public class ManifestGenerator
 	/**
 	 * \brief 
 	 * Verifies the integrity of a mod against a mod manifest.
-	 * \param modPath Path to the mod to verify.
+	 * \param dirPath Path to the directory containing the files to verify.
 	 * \param manifest Manifest to check against.
 	 * \return A list of \sa ManifestDiff containing change information.
 	 */
-	public ManifestDiff[] verify(string modPath, ManifestEntry[] manifest)
+	public ManifestDiff[] verify(string dirPath, ManifestEntry[] manifest)
 	{
 		ManifestDiff[] result;
 		size_t index;
 
 		foreach (ManifestEntry m; manifest)
 		{
-			string filePath = buildNormalizedPath(modPath, m.filePath);
+			string filePath = buildNormalizedPath(dirPath, m.filePath);
 
 			++index;
 
