@@ -518,6 +518,11 @@ public class ManifestEntry
 		this.fileSize = to!long(fields[1]);
 		this.checksum = fields[2];
 
+		static if (dirSeparator != "/")
+		{
+			filePath = filePath.replace(dirSeparator, "/");
+		}
+
 		enforce(!isRooted(this.filePath), "Absolute paths are forbidden: " ~ this.filePath);
 		enforce(!line.canFind(`..\`) && !line.canFind(`\..\`), "Parent directory traversal is forbidden: " ~ this.filePath);
 	}
@@ -527,6 +532,11 @@ public class ManifestEntry
 		this.filePath = filePath;
 		this.fileSize = fileSize;
 		this.checksum = checksum;
+
+		static if (dirSeparator != "/")
+		{
+			this.filePath = this.filePath.replace(dirSeparator, "/");
+		}
 	}
 
 	public override string toString() const
