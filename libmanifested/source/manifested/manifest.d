@@ -536,7 +536,8 @@ public class ManifestEntry
 		}
 
 		enforce(!isRooted(this.filePath), "Absolute paths are forbidden: " ~ this.filePath);
-		enforce(!line.canFind(`..\`) && !line.canFind(`\..\`), "Parent directory traversal is forbidden: " ~ this.filePath);
+		enforce(!this.filePath.canFind(`../`) && !this.filePath.canFind(`/../`),
+		        "Parent directory traversal is forbidden: " ~ this.filePath);
 	}
 
 	public this(string filePath, long fileSize, string checksum)
