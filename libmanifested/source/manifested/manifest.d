@@ -468,6 +468,14 @@ public static class Manifest
 		return lines.map!(line => new ManifestEntry(line)).array;
 	}
 
+	/// Given a diff, produces a manifest of the non-removed entries.
+	public static ManifestEntry[] fromDiff(ManifestDiff[] diff)
+	{
+		return diff.filter!(x => x.state != ManifestState.removed)
+		           .map!(x => x.current)
+		           .array;
+	}
+
 	/**
 	 * \brief 
 	 * Writes a mod manifest to a file.
