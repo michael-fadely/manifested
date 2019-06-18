@@ -137,8 +137,8 @@ int main(string[] args)
 
 	debug
 	{
-		stdout.writeln();
-		stdout.writeln("press enter to exit");
+		stderr.writeln();
+		stderr.writeln("press enter to exit");
 		stdin.readln();
 	}
 
@@ -172,22 +172,22 @@ void printDiff(ManifestDiff[] diff)
 
 			case ManifestState.added:
 			case ManifestState.changed:
-				stdout.writeln(entry.state, `: "`, entry.current.filePath, `"`);
+				stderr.writeln(entry.state, `: "`, entry.current.filePath, `"`);
 				break;
 
 			case ManifestState.removed:
-				stdout.writeln(entry.state, `: "`, entry.last.filePath, `"`);
+				stderr.writeln(entry.state, `: "`, entry.last.filePath, `"`);
 				break;
 
 			case ManifestState.moved:
-				stdout.writeln(entry.state, `: "`, entry.last.filePath, `" -> "`, entry.current.filePath, `"`);
+				stderr.writeln(entry.state, `: "`, entry.last.filePath, `" -> "`, entry.current.filePath, `"`);
 				break;
 		}
 	}
 
 	if (!n)
 	{
-		stdout.writeln("integrity OK");
+		stderr.writeln("integrity OK");
 	}
 }
 
@@ -220,9 +220,9 @@ void applyManifest(string sourcePath, ManifestEntry[] sourceManifest, string tar
 	auto generator = new ManifestGenerator();
 	auto diff = generator.diff(sourceManifest, targetManifest);
 
-	stdout.writeln("diff:");
+	stderr.writeln("diff:");
 	printDiff(diff);
-	stdout.writeln();
+	stderr.writeln();
 
 	foreach (ManifestDiff entry; diff.filter!(x => x.state != ManifestState.unchanged))
 	{
@@ -234,7 +234,7 @@ void applyManifest(string sourcePath, ManifestEntry[] sourceManifest, string tar
 
 			case ManifestState.added:
 			case ManifestState.changed:
-				stdout.writeln("applying: ", entry.state, `: "`, entry.current.filePath, `"`);
+				stderr.writeln("applying: ", entry.state, `: "`, entry.current.filePath, `"`);
 
 				auto sourceFile = buildNormalizedPath(sourcePath, entry.current.filePath);
 				auto targetFile = buildNormalizedPath(targetPath, entry.current.filePath);
@@ -250,7 +250,7 @@ void applyManifest(string sourcePath, ManifestEntry[] sourceManifest, string tar
 				break;
 
 			case ManifestState.removed:
-				stdout.writeln("applying: ", entry.state, `: "`, entry.last.filePath, `"`);
+				stderr.writeln("applying: ", entry.state, `: "`, entry.last.filePath, `"`);
 
 				auto toRemove = buildNormalizedPath(targetPath, entry.last.filePath);
 
@@ -261,14 +261,14 @@ void applyManifest(string sourcePath, ManifestEntry[] sourceManifest, string tar
 				break;
 
 			case ManifestState.moved:
-				stdout.writeln("applying: ", entry.state, `: "`, entry.last.filePath, `" -> "`, entry.current.filePath, `"`);
+				stderr.writeln("applying: ", entry.state, `: "`, entry.last.filePath, `" -> "`, entry.current.filePath, `"`);
 
 				auto from = buildNormalizedPath(targetPath, entry.last.filePath);
 				auto to   = buildNormalizedPath(targetPath, entry.current.filePath);
 
 				if (!exists(from))
 				{
-					stdout.writeln("missing! Treating as new!");
+					stderr.writeln("missing! Treating as new!");
 					goto case ManifestState.added;
 				}
 
@@ -378,9 +378,9 @@ bool repairManifest(string sourcePath, string targetPath)
 		// first, perform a normal upgrade
 		applyManifest(sourcePath, sourceManifest, targetPath, targetManifest);
 
-		stdout.writeln();
-		stdout.writeln("verifying...");
-		stdout.writeln();
+		stderr.writeln();
+		stderr.writeln("verifying...");
+		stderr.writeln();
 
 		// now verify against the source manifest which whill match the target manifest
 		auto diff = generator.verify(targetPath, sourceManifest);
@@ -398,9 +398,9 @@ bool repairManifest(string sourcePath, string targetPath)
 		return true;
 	}
 
-	stdout.writeln();
-	stdout.writeln("repairing...");
-	stdout.writeln();
+	stderr.writeln();
+	stderr.writeln("repairing...");
+	stderr.writeln();
 
 	auto fakeManifest = Manifest.fromDiff(diff);
 
