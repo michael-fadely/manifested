@@ -73,20 +73,20 @@ public class ManifestDiff
 	public ManifestState state;
 	/**
 	 * \brief 
-	 * The newer of the two entries.
-	 */
-	public ManifestEntry current;
-	/**
-	 * \brief 
 	 * The older of the two entries.
 	 */
 	public ManifestEntry last;
+	/**
+	 * \brief 
+	 * The newer of the two entries.
+	 */
+	public ManifestEntry current;
 
-	public this(ManifestState state, ManifestEntry current, ManifestEntry last)
+	public this(ManifestState state, ManifestEntry last, ManifestEntry current)
 	{
 		this.state   = state;
-		this.current = current;
 		this.last    = last;
+		this.current = current;
 	}
 }
 
@@ -259,7 +259,7 @@ public class ManifestGenerator
 			if (exact !is null)
 			{
 				old = old.remove!(x => x is exact);
-				result ~= new ManifestDiff(ManifestState.unchanged, newEntry, null);
+				result ~= new ManifestDiff(ManifestState.unchanged, newEntry, newEntry);
 				continue;
 			}
 
@@ -282,7 +282,7 @@ public class ManifestGenerator
 						old = old.remove!(x => x is tbd);
 					}
 
-					result ~= new ManifestDiff(ManifestState.moved, newEntry, checksumMatches[0]);
+					result ~= new ManifestDiff(ManifestState.moved, first, newEntry);
 					continue;
 				}
 			}
@@ -294,12 +294,12 @@ public class ManifestGenerator
 			if (nameMatch !is null)
 			{
 				old = old.remove!(x => x is nameMatch);
-				result ~= new ManifestDiff(ManifestState.changed, newEntry, nameMatch);
+				result ~= new ManifestDiff(ManifestState.changed, nameMatch, newEntry);
 				continue;
 			}
 
 			// In every other case, this file is newly added.
-			result ~= new ManifestDiff(ManifestState.added, newEntry, null);
+			result ~= new ManifestDiff(ManifestState.added, null, newEntry);
 		}
 
 		// All files that are still unique to the old manifest should be marked for removal.
@@ -358,7 +358,10 @@ public class ManifestGenerator
 
 				if (info.size != m.fileSize)
 				{
-					result ~= new ManifestDiff(ManifestState.changed, m, null);
+					// this null checksum should raise red flags and e.g force a copy on
+					// manifest application
+					auto newEntry = new ManifestEntry(m.filePath, info.size, null);
+					result ~= new ManifestDiff(ManifestState.changed, m, newEntry);
 					continue;
 				}
 
@@ -366,11 +369,12 @@ public class ManifestGenerator
 				
 				if (!!sicmp(hash, m.checksum))
 				{
-					result ~= new ManifestDiff(ManifestState.changed, m, null);
+					auto newEntry = new ManifestEntry(m.filePath, info.size, hash);
+					result ~= new ManifestDiff(ManifestState.changed, m, newEntry);
 					continue;
 				}
 
-				result ~= new ManifestDiff(ManifestState.unchanged, m, null);
+				result ~= new ManifestDiff(ManifestState.unchanged, m, m);
 			//}
 			//finally
 			//{
