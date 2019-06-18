@@ -59,16 +59,6 @@ int main(string[] args)
 
 	try
 	{
-		if (!sourcePath.empty)
-		{
-			enforce(exists(sourcePath), "Source path does not exist.");
-		}
-
-		if (!targetPath.empty)
-		{
-			enforce(exists(targetPath), "Target path does not exist.");
-		}
-
 		final switch (mode) with (Operation)
 		{
 			case none:
