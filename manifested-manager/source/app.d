@@ -6,6 +6,7 @@ import std.file;
 import std.getopt;
 import std.path;
 import std.stdio;
+import std.string;
 
 import manifested;
 
@@ -116,6 +117,13 @@ int main(string[] args)
 		return -1;
 	}
 
+	debug
+	{
+		stdout.writeln();
+		stdout.writeln("press enter to exit");
+		stdin.readln();
+	}
+
 	return 0;
 }
 
@@ -196,8 +204,6 @@ bool applyManifest(string sourcePath, string targetPath)
 	auto generator = new ManifestGenerator();
 	auto diff = generator.diff(sourceManifest, targetManifest);
 
-	// TODO: track empty dirs, remove if empty (with consideration for untracked files)
-
 	foreach (ManifestDiff entry; diff.filter!(x => x.state != ManifestState.unchanged))
 	{
 		final switch (entry.state)
@@ -255,6 +261,64 @@ bool applyManifest(string sourcePath, string targetPath)
 
 				rename(from, to);
 				break;
+		}
+	}
+
+	// oh god... sort by deepest (unique) dir level to highest
+	auto sourceDirs = sourceManifest
+		.map!(x => to!string(dirName(x.filePath).asNormalizedPath))
+		.array
+		.sort
+		.uniq
+		.array
+		.sort!((a, b) => a.count(dirSeparator) > b.count(dirSeparator));
+
+	// OH GOD
+	auto targetDirs = targetManifest
+		.map!(x => to!string(dirName(x.filePath).asNormalizedPath))
+		.array
+		.sort
+		.uniq
+		.array
+		.sort!((a, b) => a.count(dirSeparator) > b.count(dirSeparator));
+
+	// grab all dirs unique to the old manifest
+	auto oldDirs = targetDirs.filter!(x => !sourceDirs.canFind!((a, b) => a == b)(x))
+	                         .map!(x => targetPath.buildNormalizedPath(x))
+	                         .filter!(x => x.exists);
+
+	// check each of them for any files
+	foreach (dir; oldDirs)
+	{
+		size_t fileCount;
+		auto entries = dirEntries(dir, SpanMode.shallow);
+
+		while (!entries.empty)
+		{
+			try
+			{
+				auto entry = entries.front;
+
+				if (entry.isFile)
+				{
+					++fileCount;
+				}
+			}
+			catch (Exception ex)
+			{
+				// ok well I mean it's not empty then,
+				// and we can only assume it's a file
+				++fileCount;
+			}
+
+			entries.popFront();
+		}
+
+		// the folder doesn't have any files in it,
+		// so just remove it.
+		if (!fileCount)
+		{
+			rmdir(dir);
 		}
 	}
 
