@@ -133,13 +133,11 @@ bool generateManifest(string sourcePath)
 
 void printDiff(ManifestDiff[] diff)
 {
-	if (diff.empty)
-	{
-		stdout.writeln("no change");
-	}
+	size_t n;
 
 	foreach (ManifestDiff entry; diff.filter!(x => x.state != ManifestState.unchanged))
 	{
+		++n;
 		final switch (entry.state)
 		{
 			// impossible, but `final switch`
@@ -157,12 +155,17 @@ void printDiff(ManifestDiff[] diff)
 				break;
 		}
 	}
+
+	if (!n)
+	{
+		stdout.writeln("no change");
+	}
 }
 
 bool verifyManifest(string sourcePath)
 {
 	auto generator = new ManifestGenerator();
-	auto manifest = Manifest.fromFile(sourcePath);
+	auto manifest = Manifest.fromFile(buildNormalizedPath(sourcePath, manifestFileName));
 	auto diff = generator.verify(sourcePath, manifest);
 
 	printDiff(diff);
@@ -176,7 +179,7 @@ bool compareManifests(string sourcePath, string targetPath)
 	auto targetManifest = Manifest.fromFile(buildNormalizedPath(targetPath, manifestFileName));
 
 	auto generator = new ManifestGenerator();
-	auto diff = generator.diff(sourceManifest, targetManifest);
+	auto diff = generator.diff(targetManifest, sourceManifest);
 
 	printDiff(diff);
 
@@ -185,8 +188,10 @@ bool compareManifests(string sourcePath, string targetPath)
 
 bool applyManifest(string sourcePath, string targetPath)
 {
-	auto sourceManifest = Manifest.fromFile(buildNormalizedPath(sourcePath, manifestFileName));
-	auto targetManifest = Manifest.fromFile(buildNormalizedPath(targetPath, manifestFileName));
+	string sourceManifestPath = buildNormalizedPath(sourcePath, manifestFileName);
+	string targetManifestPath = buildNormalizedPath(targetPath, manifestFileName);
+	auto sourceManifest = Manifest.fromFile(sourceManifestPath);
+	auto targetManifest = Manifest.fromFile(targetManifestPath);
 
 	auto generator = new ManifestGenerator();
 	auto diff = generator.diff(sourceManifest, targetManifest);
@@ -221,7 +226,12 @@ bool applyManifest(string sourcePath, string targetPath)
 			case ManifestState.removed:
 				stdout.writeln(entry.state, `: "`, entry.current.filePath, `"`);
 
-				remove(buildNormalizedPath(targetPath, entry.current.filePath));
+				auto toRemove = buildNormalizedPath(targetPath, entry.current.filePath);
+
+				if (exists(toRemove))
+				{
+					remove(buildNormalizedPath(targetPath, entry.current.filePath));
+				}
 				break;
 
 			case ManifestState.moved:
@@ -229,6 +239,12 @@ bool applyManifest(string sourcePath, string targetPath)
 
 				auto from = buildNormalizedPath(targetPath, entry.last.filePath);
 				auto to   = buildNormalizedPath(targetPath, entry.current.filePath);
+
+				if (!exists(from))
+				{
+					stdout.writeln("missing! Treating as new!");
+					goto case ManifestState.added;
+				}
 
 				auto toDir = dirName(to);
 
@@ -242,5 +258,8 @@ bool applyManifest(string sourcePath, string targetPath)
 		}
 	}
 
-	return false;
+	// when all is said and done, copy the manifest from the source to the target
+	copy(sourceManifestPath, targetManifestPath);
+
+	return true;
 }
