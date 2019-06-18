@@ -7,7 +7,7 @@ import std.file;
 import std.path;
 import std.range;
 import std.stdio;
-import std.string : replace, split, splitLines;
+import std.string : replace, split, splitLines, strip;
 import std.uni : sicmp;
 
 import symlinkd.symlink;
@@ -251,53 +251,55 @@ public class ManifestGenerator
 			old = oldManifest.dup;
 		}
 
-		foreach (ManifestEntry entry; newManifest)
+		foreach (ManifestEntry newEntry; newManifest)
 		{
 			// First, check for an exact match. File path/name, hash, size; everything.
-			const exact = old.firstOrDefault!(x => x == entry);
+			const exact = old.firstOrDefault!(x => x == newEntry);
 
 			if (exact !is null)
 			{
-				old = old.remove!(x => x == exact);
-				result ~= new ManifestDiff(ManifestState.unchanged, entry, null);
+				old = old.remove!(x => x is exact);
+				result ~= new ManifestDiff(ManifestState.unchanged, newEntry, null);
 				continue;
 			}
 
 			// There's no exact match, so let's search by checksum.
-			ManifestEntry[] checksum = old.filter!(x => !sicmp(x.checksum, entry.checksum)).array;
+			ManifestEntry[] checksumMatches = old.filter!(x => !sicmp(x.checksum, newEntry.checksum)).array;
 
 			// If we've found matching checksums, we then need to check
 			// the file path to see if it's been moved.
-			if (checksum.length > 0)
+			if (checksumMatches.length > 0)
 			{
-				foreach (ManifestEntry c; checksum)
-				{
-					old = old.remove!(x => x == c);
-				}
+				auto first = checksumMatches[0];
+				old = old.remove!(x => x is first);
 
-				if (checksum.all!(x => x.filePath != entry.filePath))
+				if (checksumMatches.all!(x => x.filePath != newEntry.filePath))
 				{
-					const tbd = old.firstOrDefault!(x => !sicmp(x.filePath, entry.filePath));
+					const tbd = old.firstOrDefault!(x => x.filePath == newEntry.filePath);
 
-					old = old.remove!(x => x == tbd);
-					result ~= new ManifestDiff(ManifestState.moved, entry, checksum[0]);
+					if (tbd !is null)
+					{
+						old = old.remove!(x => x is tbd);
+					}
+
+					result ~= new ManifestDiff(ManifestState.moved, newEntry, checksumMatches[0]);
 					continue;
 				}
 			}
 
 			// If we've made it here, there's no matching checksums, so let's search
 			// for matching paths. If a path matches, the file has been modified.
-			ManifestEntry nameMatch = old.firstOrDefault!(x => !sicmp(x.filePath, entry.filePath));
+			ManifestEntry nameMatch = old.firstOrDefault!(x => x.filePath == newEntry.filePath);
 
 			if (nameMatch !is null)
 			{
-				old = old.remove!(x => x == nameMatch);
-				result ~= new ManifestDiff(ManifestState.changed, entry, nameMatch);
+				old = old.remove!(x => x is nameMatch);
+				result ~= new ManifestDiff(ManifestState.changed, newEntry, nameMatch);
 				continue;
 			}
 
 			// In every other case, this file is newly added.
-			result ~= new ManifestDiff(ManifestState.added, entry, null);
+			result ~= new ManifestDiff(ManifestState.added, newEntry, null);
 		}
 
 		// All files that are still unique to the old manifest should be marked for removal.
@@ -362,7 +364,7 @@ public class ManifestGenerator
 
 				string hash = getFileHash(filePath);
 				
-				if (sicmp(hash, m.checksum))
+				if (!!sicmp(hash, m.checksum))
 				{
 					result ~= new ManifestDiff(ManifestState.changed, m, null);
 					continue;
@@ -507,7 +509,7 @@ public class ManifestEntry
 	 */
 	public this(string line)
 	{
-		string[] fields = line.split('\t');
+		string[] fields = line.splitter('\t').map!(x => x.strip()).array;
 
 		import std.conv : to;
 		enforce(fields.length == 3, "Manifest line must have 3 fields. Provided: " ~ to!string(fields.length));
@@ -548,7 +550,7 @@ public class ManifestEntry
 		}
 
 		return fileSize == m.fileSize &&
-		       !sicmp(filePath, m.filePath) &&
+		       filePath == m.filePath &&
 		       !sicmp(checksum, m.checksum);
 	}
 
