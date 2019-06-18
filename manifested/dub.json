@@ -3,10 +3,10 @@
 		"Michael Fadely"
 	],
 	"copyright": "Copyright © 2019, Michael Fadely",
-	"description": "File manifest generator.",
+	"description": "An application which can generate, compare, and apply manifested diffs.",
 	"license": "MIT",
 	"name": "manifested",
 	"dependencies": {
-		"symlinkd": "~>1.0.0"
+		"libmanifested": { "path": "../libmanifested" }
 	}
 }
