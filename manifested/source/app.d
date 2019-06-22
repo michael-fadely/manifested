@@ -10,26 +10,36 @@ import std.string;
 
 import manifested;
 
-// TODO: consider different names for these
+// TODO: clean - remove unversioned files
+
+/// Manifest operations to perform.
 enum Operation
 {
 	/// Invalid mode.
 	none,
-	/// Generate a manifest for a given source directory.
+
+	/// Generate a manifest for a given target directory.
 	generate,
-	/// Verify file integrity according to the manifested directory.
+
+	/// Verify file integrity of a directory according to its manifest.
 	verify,
+
 	/// Compare two manifested directories.
 	compare,
-	/// Update target directory to match source directory's manifest.
-	apply,
-	/// Combination of `verify` and `apply`.
-	/// Take manifest from source, verify findings, and apply changes where applicable.
-	repair,
-	/// Deploys a source to a target destination according to the manifest.
-	deploy
 
-	// TODO: clean - remove unversioned files
+	/// Update target directory to match source directory's manifest.
+	update,
+
+	/**
+	 * Combination of `verify` and `update`.
+	 * First performs `update` to pull changed files, then `verify`
+	 * to validate data. If any files fail the validation check,
+	 * `update` is run again to pull the latest files.
+	 */
+	repair,
+
+	/// Copies manifest and tracked files from the source to the target.
+	deploy
 }
 
 int main(string[] args)
@@ -41,13 +51,33 @@ int main(string[] args)
 	try
 	{
 		auto result = getopt(args,
-		                     "m|mode",   "Operation to perform.",               &mode,
-		                     "s|source", "Source directory for the operation.", &sourcePath,
-		                     "t|target", "Target directory of the operation.",  &targetPath);
+		                     "m|mode",
+		                     "Operation to perform.",
+		                     &mode,
+
+		                     "s|source",
+		                     "Source directory for the operation.",
+		                     &sourcePath,
+
+		                     "t|target",
+		                     "Target directory of the operation.",
+		                     &targetPath);
 
 		if (result.helpWanted)
 		{
 			defaultGetoptPrinter("Manifest generator.", result.options);
+
+			stdout.writeln();
+			stdout.writeln("Operation modes:");
+			stdout.writeln(`	generate: Generate a manifest for a given target directory.`);
+			stdout.writeln(`	  verify: Verify file integrity of a directory according to its manifest.`);
+			stdout.writeln(`	 compare: Compare two manifested directories.`);
+			stdout.writeln(`	  update: Update target directory to match source directory's manifest.`);
+			stdout.writeln(`	  repair: Combination of "verify" and "update".`);
+			stdout.writeln(`	          First performs "update" to pull changed files, then "verify"`);
+			stdout.writeln(`	          to validate data. If any files fail the validation check,`);
+			stdout.writeln(`	          "update" is run again to pull the latest files.`);
+
 			return 0;
 		}
 	}
@@ -67,65 +97,42 @@ int main(string[] args)
 
 			case generate:
 				enforce(!targetPath.empty, "Target directory must be specified to generate a manifest.");
-				if (!generateManifest(targetPath))
-				{
-					return -3;
-				}
 
+				generateManifest(targetPath);
 				break;
 
 			case verify:
 				enforce(!targetPath.empty, "Target directory must be specified to verify a manifest.");
 
-				if (!verifyManifest(targetPath))
-				{
-					return -4;
-				}
-
+				verifyManifest(targetPath);
 				break;
 
 			case compare:
 				enforce(!sourcePath.empty && !targetPath.empty,
 				        "Source and target directories must both be specified for operation mode " ~ to!string(mode));
 
-				if (!compareManifests(sourcePath, targetPath))
-				{
-					return -5;
-				}
-
+				compareManifests(sourcePath, targetPath);
 				break;
 
-			case apply:
+			case update:
 				enforce(!sourcePath.empty && !targetPath.empty,
 				        "Source and target directories must both be specified for operation mode " ~ to!string(mode));
 
-				if (!applyManifest(sourcePath, targetPath))
-				{
-					return -6;
-				}
-
+				applyManifest(sourcePath, targetPath);
 				break;
 
 			case repair:
 				enforce(!sourcePath.empty && !targetPath.empty,
 				        "Source and target directories must both be specified for operation mode " ~ to!string(mode));
 
-				if (!repairManifest(sourcePath, targetPath))
-				{
-					return -7;
-				}
-
+				repairManifest(sourcePath, targetPath);
 				break;
 
 			case deploy:
 				enforce(!sourcePath.empty && !targetPath.empty,
 				        "Source and target directories must both be specified for operation mode " ~ to!string(mode));
 
-				if (!deployManifest(sourcePath, targetPath))
-				{
-					return -8;
-				}
-
+				deployManifest(sourcePath, targetPath);
 				break;
 		}
 	}
@@ -149,12 +156,11 @@ private:
 
 const manifestFileName = ".manifest";
 
-bool generateManifest(string sourcePath)
+void generateManifest(string sourcePath)
 {
 	auto generator = new ManifestGenerator();
 	auto manifest = generator.generate(sourcePath);
 	Manifest.toFile(manifest, buildNormalizedPath(sourcePath, manifestFileName));
-	return true;
 }
 
 void printDiff(ManifestDiff[] diff)
@@ -191,18 +197,16 @@ void printDiff(ManifestDiff[] diff)
 	}
 }
 
-bool verifyManifest(string sourcePath)
+void verifyManifest(string sourcePath)
 {
 	auto generator = new ManifestGenerator();
 	auto manifest = Manifest.fromFile(buildNormalizedPath(sourcePath, manifestFileName));
 	auto diff = generator.verify(sourcePath, manifest);
 
 	printDiff(diff);
-
-	return true;
 }
 
-bool compareManifests(string sourcePath, string targetPath)
+void compareManifests(string sourcePath, string targetPath)
 {
 	auto sourceManifest = Manifest.fromFile(buildNormalizedPath(sourcePath, manifestFileName));
 	auto targetManifest = Manifest.fromFile(buildNormalizedPath(targetPath, manifestFileName));
@@ -211,8 +215,6 @@ bool compareManifests(string sourcePath, string targetPath)
 	auto diff = generator.diff(targetManifest, sourceManifest);
 
 	printDiff(diff);
-
-	return true;
 }
 
 void applyManifest(string sourcePath, ManifestEntry[] sourceManifest, string targetPath, ManifestEntry[] targetManifest)
@@ -236,10 +238,10 @@ void applyManifest(string sourcePath, ManifestEntry[] sourceManifest, string tar
 			case ManifestState.changed:
 				stderr.writeln("applying: ", entry.state, `: "`, entry.current.filePath, `"`);
 
-				auto sourceFile = buildNormalizedPath(sourcePath, entry.current.filePath);
-				auto targetFile = buildNormalizedPath(targetPath, entry.current.filePath);
+				const sourceFile = buildNormalizedPath(sourcePath, entry.current.filePath);
+				const targetFile = buildNormalizedPath(targetPath, entry.current.filePath);
 
-				auto targetDir = dirName(targetFile);
+				const targetDir = dirName(targetFile);
 
 				if (!exists(targetDir))
 				{
@@ -252,19 +254,20 @@ void applyManifest(string sourcePath, ManifestEntry[] sourceManifest, string tar
 			case ManifestState.removed:
 				stderr.writeln("applying: ", entry.state, `: "`, entry.last.filePath, `"`);
 
-				auto toRemove = buildNormalizedPath(targetPath, entry.last.filePath);
+				const toRemove = buildNormalizedPath(targetPath, entry.last.filePath);
 
 				if (exists(toRemove))
 				{
 					remove(toRemove);
 				}
+
 				break;
 
 			case ManifestState.moved:
 				stderr.writeln("applying: ", entry.state, `: "`, entry.last.filePath, `" -> "`, entry.current.filePath, `"`);
 
-				auto from = buildNormalizedPath(targetPath, entry.last.filePath);
-				auto to   = buildNormalizedPath(targetPath, entry.current.filePath);
+				const from = buildNormalizedPath(targetPath, entry.last.filePath);
+				const to   = buildNormalizedPath(targetPath, entry.current.filePath);
 
 				if (!exists(from))
 				{
@@ -272,7 +275,7 @@ void applyManifest(string sourcePath, ManifestEntry[] sourceManifest, string tar
 					goto case ManifestState.added;
 				}
 
-				auto toDir = dirName(to);
+				const toDir = dirName(to);
 
 				if (!exists(toDir))
 				{
@@ -285,22 +288,20 @@ void applyManifest(string sourcePath, ManifestEntry[] sourceManifest, string tar
 	}
 
 	// oh god... sort by deepest (unique) dir level to highest
-	auto sourceDirs = sourceManifest
-		.map!(x => to!string(dirName(x.filePath).asNormalizedPath))
-		.array
-		.sort
-		.uniq
-		.array
-		.sort!((a, b) => a.count(dirSeparator) > b.count(dirSeparator));
+	auto sourceDirs = sourceManifest.map!(x => to!string(dirName(x.filePath).asNormalizedPath))
+	                                .array
+	                                .sort
+	                                .uniq
+	                                .array
+	                                .sort!((a, b) => a.count(dirSeparator) > b.count(dirSeparator));
 
 	// OH GOD
-	auto targetDirs = targetManifest
-		.map!(x => to!string(dirName(x.filePath).asNormalizedPath))
-		.array
-		.sort
-		.uniq
-		.array
-		.sort!((a, b) => a.count(dirSeparator) > b.count(dirSeparator));
+	auto targetDirs = targetManifest.map!(x => to!string(dirName(x.filePath).asNormalizedPath))
+	                                .array
+	                                .sort
+	                                .uniq
+	                                .array
+	                                .sort!((a, b) => a.count(dirSeparator) > b.count(dirSeparator));
 
 	// grab all dirs unique to the old manifest
 	auto oldDirs = targetDirs.filter!(x => !sourceDirs.canFind!((a, b) => a == b)(x))
@@ -346,7 +347,7 @@ void applyManifest(string sourcePath, ManifestEntry[] sourceManifest, string tar
 	copy(sourcePath.buildNormalizedPath(manifestFileName), targetPath.buildNormalizedPath(manifestFileName));
 }
 
-bool applyManifest(string sourcePath, string targetPath)
+void applyManifest(string sourcePath, string targetPath)
 {
 	string sourceManifestPath = buildNormalizedPath(sourcePath, manifestFileName);
 	string targetManifestPath = buildNormalizedPath(targetPath, manifestFileName);
@@ -358,11 +359,9 @@ bool applyManifest(string sourcePath, string targetPath)
 	auto targetManifest = Manifest.fromFile(targetManifestPath);
 
 	applyManifest(sourcePath, sourceManifest, targetPath, targetManifest);
-
-	return true;
 }
 
-bool repairManifest(string sourcePath, string targetPath)
+void repairManifest(string sourcePath, string targetPath)
 {
 	auto generator = new ManifestGenerator();
 
@@ -375,7 +374,7 @@ bool repairManifest(string sourcePath, string targetPath)
 	{
 		ManifestEntry[] targetManifest = Manifest.fromFile(targetManifestPath);
 
-		// first, perform a normal upgrade
+		// first, perform a normal update
 		applyManifest(sourcePath, sourceManifest, targetPath, targetManifest);
 
 		stderr.writeln();
@@ -386,7 +385,7 @@ bool repairManifest(string sourcePath, string targetPath)
 		auto diff = generator.verify(targetPath, sourceManifest);
 		applyManifest(sourcePath, sourceManifest, targetPath, Manifest.fromDiff(diff));
 
-		return true;
+		return;
 	}
 
 	auto diff = generator.verify(targetPath, sourceManifest);
@@ -395,7 +394,7 @@ bool repairManifest(string sourcePath, string targetPath)
 
 	if (diff.all!(x => x.state == ManifestState.unchanged))
 	{
-		return true;
+		return;
 	}
 
 	stderr.writeln();
@@ -405,10 +404,9 @@ bool repairManifest(string sourcePath, string targetPath)
 	auto fakeManifest = Manifest.fromDiff(diff);
 
 	applyManifest(sourcePath, sourceManifest, targetPath, fakeManifest);
-	return true;
 }
 
-bool deployManifest(string sourcePath, string targetPath)
+void deployManifest(string sourcePath, string targetPath)
 {
 	string sourceManifestPath = buildNormalizedPath(sourcePath, manifestFileName);
 
@@ -421,5 +419,4 @@ bool deployManifest(string sourcePath, string targetPath)
 
 	auto sourceManifest = Manifest.fromFile(sourceManifestPath);
 	applyManifest(sourcePath, sourceManifest, targetPath, null);
-	return true;
 }
