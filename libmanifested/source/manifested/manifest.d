@@ -162,36 +162,16 @@ public class ManifestGenerator
 			return result;
 		}
 
-		//OnFilesIndexed(new FilesIndexedEventArgs(fileIndex.length));
-
-		//size_t index;
+		dirPath = dirPath.asNormalizedPath.array;
 
 		foreach (string f; fileIndex)
 		{
-			string relativePath = f[dirPath.length + 1 .. $];
+			string relative = f[dirPath.length + 1 .. $];
 			DirEntry file = getFileInfo(f);
-
-			//++index;
-
-			//auto args = new FileHashEventArgs(relativePath, index, fileIndex.length);
-			//OnFileHashStart(args);
-
-			//if (args.Cancel)
-			//{
-			//	return null;
-			//}
 
 			string hash = getFileHash(f);
 
-			//args = new FileHashEventArgs(relativePath, index, fileIndex.length);
-			//OnFileHashEnd(args);
-
-			//if (args.Cancel)
-			//{
-			//	return null;
-			//}
-
-			result ~= new ManifestEntry(relativePath, file.size, hash);
+			result ~= new ManifestEntry(relative, file.size, hash);
 		}
 
 		return result;
@@ -511,6 +491,8 @@ public class ManifestEntry
 	 */
 	public const string checksum;
 
+	public static const string pathSeparator = "/";
+
 	/**
 	 * \brief 
 	 * Parses a line from a mod manifest line and constructs a \sa ManifestEntry .
@@ -530,14 +512,7 @@ public class ManifestEntry
 		this.fileSize = to!long(fields[1]);
 		this.checksum = fields[2];
 
-		static if (dirSeparator != "/")
-		{
-			filePath = filePath.replace(dirSeparator, "/");
-		}
-
-		enforce(!isRooted(this.filePath), "Absolute paths are forbidden: " ~ this.filePath);
-		enforce(!this.filePath.canFind(`../`) && !this.filePath.canFind(`/../`),
-		        "Parent directory traversal is forbidden: " ~ this.filePath);
+		validateFilePath();
 	}
 
 	public this(string filePath, long fileSize, string checksum)
@@ -546,10 +521,19 @@ public class ManifestEntry
 		this.fileSize = fileSize;
 		this.checksum = checksum;
 
-		static if (dirSeparator != "/")
+		validateFilePath();
+	}
+
+	private void validateFilePath()
+	{
+		static if (dirSeparator != pathSeparator)
 		{
-			this.filePath = this.filePath.replace(dirSeparator, "/");
+			filePath = filePath.replace(dirSeparator, pathSeparator);
 		}
+
+		enforce(!isRooted(this.filePath), "Absolute paths are forbidden: " ~ this.filePath);
+		enforce(!this.filePath.canFind(`..` ~ pathSeparator) && !this.filePath.canFind(pathSeparator ~ `..` ~ pathSeparator),
+		        "Parent directory traversal is forbidden: " ~ this.filePath);
 	}
 
 	public override string toString() const
