@@ -66,7 +66,7 @@ int main(string[] args)
 				return -2;
 
 			case generate:
-				enforce(!targetPath.empty, "Source directory must be specified to generate a manifest.");
+				enforce(!targetPath.empty, "Target directory must be specified to generate a manifest.");
 				if (!generateManifest(targetPath))
 				{
 					return -3;
@@ -75,7 +75,7 @@ int main(string[] args)
 				break;
 
 			case verify:
-				enforce(!targetPath.empty, "Source directory must be specified to verify a manifest.");
+				enforce(!targetPath.empty, "Target directory must be specified to verify a manifest.");
 
 				if (!verifyManifest(targetPath))
 				{
@@ -317,7 +317,7 @@ void applyManifest(string sourcePath, ManifestEntry[] sourceManifest, string tar
 		{
 			try
 			{
-				auto entry = entries.front;
+				const entry = entries.front;
 
 				if (entry.isFile)
 				{
