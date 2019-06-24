@@ -212,7 +212,7 @@ void compareManifests(string sourcePath, string targetPath)
 	auto targetManifest = Manifest.fromFile(buildNormalizedPath(targetPath, manifestFileName));
 
 	auto generator = new ManifestGenerator();
-	auto diff = generator.diff(targetManifest, sourceManifest);
+	auto diff = generator.diff(sourceManifest, targetManifest);
 
 	printDiff(diff);
 }
