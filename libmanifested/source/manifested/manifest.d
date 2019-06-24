@@ -151,6 +151,7 @@ public class ManifestGenerator
 
 		ManifestEntry[] result;
 
+		// TODO: don't hard-code ".manifest"
 		string[] fileIndex = dirEntries(dirPath, SpanMode.breadth)
 		                     .filter!(x => !x.empty && x.isFile &&
 		                              baseName(x) != ".manifest")

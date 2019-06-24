@@ -287,26 +287,23 @@ void applyManifest(string sourcePath, ManifestEntry[] sourceManifest, string tar
 		}
 	}
 
-	// oh god... sort by deepest (unique) dir level to highest
-	auto sourceDirs = sourceManifest.map!(x => to!string(dirName(x.filePath).asNormalizedPath))
-	                                .array
-	                                .sort
-	                                .uniq
-	                                .array
-	                                .sort!((a, b) => a.count(dirSeparator) > b.count(dirSeparator));
+	bool[string] sourceSet, targetSet;
 
-	// OH GOD
-	auto targetDirs = targetManifest.map!(x => to!string(dirName(x.filePath).asNormalizedPath))
-	                                .array
-	                                .sort
-	                                .uniq
-	                                .array
-	                                .sort!((a, b) => a.count(dirSeparator) > b.count(dirSeparator));
+	auto sourcePaths = sourceManifest.map!(x => to!string(dirName(x.filePath).asNormalizedPath));
+	sourcePaths.each!(x => sourceSet[x] = true);
+
+	auto targetPaths = targetManifest.map!(x => to!string(dirName(x.filePath).asNormalizedPath));
+	targetPaths.each!(x => targetSet[x] = true);
+
+	auto uniqueTargetPaths = targetSet.byKey
+	                                  .array
+	                                  .sort!((a, b) => a.count(dirSeparator) > b.count(dirSeparator));
+
 
 	// grab all dirs unique to the old manifest
-	auto oldDirs = targetDirs.filter!(x => !sourceDirs.canFind!((a, b) => a == b)(x))
-	                         .map!(x => targetPath.buildNormalizedPath(x))
-	                         .filter!(x => x.exists);
+	auto oldDirs = uniqueTargetPaths.filter!(x => (x in sourceSet) is null)
+	                                .map!(x => buildNormalizedPath(targetPath, x))
+	                                .filter!(x => x.exists);
 
 	// check each of them for any files
 	foreach (dir; oldDirs)
