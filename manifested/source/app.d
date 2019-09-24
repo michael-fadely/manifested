@@ -299,7 +299,6 @@ void applyManifest(string sourcePath, ManifestEntry[] sourceManifest, string tar
 	                                  .array
 	                                  .sort!((a, b) => a.count(dirSeparator) > b.count(dirSeparator));
 
-
 	// grab all dirs unique to the old manifest
 	auto oldDirs = uniqueTargetPaths.filter!(x => (x in sourceSet) is null)
 	                                .map!(x => buildNormalizedPath(targetPath, x))
