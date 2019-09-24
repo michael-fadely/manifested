@@ -305,10 +305,12 @@ void applyManifest(string sourcePath, ManifestEntry[] sourceManifest, string tar
 	                                .map!(x => buildNormalizedPath(targetPath, x))
 	                                .filter!(x => x.exists);
 
+	// TODO: remove empty parent directories too
+
 	// check each of them for any files
 	foreach (dir; oldDirs)
 	{
-		size_t fileCount;
+		size_t dirEntryCount;
 		auto entries = dirEntries(dir, SpanMode.shallow);
 
 		while (!entries.empty)
@@ -316,17 +318,13 @@ void applyManifest(string sourcePath, ManifestEntry[] sourceManifest, string tar
 			try
 			{
 				const entry = entries.front;
-
-				if (entry.isFile)
-				{
-					++fileCount;
-				}
+				++dirEntryCount;
 			}
 			catch (Exception ex)
 			{
-				// ok well I mean it's not empty then,
-				// and we can only assume it's a file
-				++fileCount;
+				// ok well I mean it's not empty then, and we can only assume it "exists",
+				// even if it's e.g. a broken symlink
+				++dirEntryCount;
 			}
 
 			entries.popFront();
@@ -334,7 +332,7 @@ void applyManifest(string sourcePath, ManifestEntry[] sourceManifest, string tar
 
 		// the folder doesn't have any files in it,
 		// so just remove it.
-		if (!fileCount)
+		if (!dirEntryCount)
 		{
 			rmdir(dir);
 		}
