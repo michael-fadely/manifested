@@ -36,21 +36,25 @@ public enum ManifestState
 	 * The file is unchanged.
 	 */
 	unchanged,
+
 	/**
 	 * \brief 
 	 * Indicates that a file has been moved, renamed, or both.
 	 */
 	moved,
+
 	/**
 	 * \brief 
 	 * The file has been modified in some way.
 	 */
 	changed,
+
 	/**
 	 * \brief 
 	 * The file has been added to the new manifest.
 	 */
 	added,
+
 	/**
 	 * \brief 
 	 * The file has been removed from the new manifest.
@@ -71,11 +75,13 @@ public class ManifestDiff
 	 * \sa ManifestState
 	 */
 	public ManifestState state;
+
 	/**
 	 * \brief 
 	 * The older of the two entries.
 	 */
 	public ManifestEntry last;
+
 	/**
 	 * \brief 
 	 * The newer of the two entries.
@@ -89,34 +95,6 @@ public class ManifestDiff
 		this.current = current;
 	}
 }
-
-/*
-public class FilesIndexedEventArgs : EventArgs
-{
-	public this(int fileCount)
-	{
-		FileCount = fileCount;
-	}
-
-	public int FileCount;
-}
-
-public class FileHashEventArgs : EventArgs
-{
-	public this(string fileName, int fileIndex, int fileCount)
-	{
-		FileName  = fileName;
-		FileIndex = fileIndex;
-		FileCount = fileCount;
-		Cancel    = false;
-	}
-
-	public string FileName;  // TODO: { get; }
-	public int    FileIndex; // TODO: { get; }
-	public int    FileCount; // TODO: { get; }
-	public bool   Cancel;    // TODO: { get; set; }
-}
-*/
 
 public class DirectoryNotFoundException : Exception
 {
@@ -132,10 +110,6 @@ public:
 
 public class ManifestGenerator
 {
-	//public event EventHandler<FilesIndexedEventArgs> FilesIndexed;
-	//public event EventHandler<FileHashEventArgs>     FileHashStart;
-	//public event EventHandler<FileHashEventArgs>     FileHashEnd;
-
 	/**
 	 * \brief 
 	 * Generates a manifest for a given directory hierarchy.
@@ -307,66 +281,43 @@ public class ManifestGenerator
 		{
 			string filePath = buildNormalizedPath(dirPath, m.filePath);
 
-			//++index;
+			if (!exists(filePath))
+			{
+				result ~= new ManifestDiff(ManifestState.removed, m, null);
+				continue;
+			}
 
-			//auto args = new FileHashEventArgs(m.filePath, index, manifest.length);
-			//OnFileHashStart(args);
+			DirEntry info;
 
-			//if (args.Cancel)
-			//{
-			//	return null;
-			//}
+			try
+			{
+				info = getFileInfo(filePath);
+			}
+			catch (FileException)
+			{
+				result ~= new ManifestDiff(ManifestState.removed, m, null);
+				continue;
+			}
 
-			//try
-			//{
-				if (!exists(filePath))
-				{
-					result ~= new ManifestDiff(ManifestState.removed, m, null);
-					continue;
-				}
+			if (info.size != m.fileSize)
+			{
+				// this null checksum should raise red flags and e.g force a copy on
+				// manifest application
+				auto newEntry = new ManifestEntry(m.filePath, info.size, null);
+				result ~= new ManifestDiff(ManifestState.changed, m, newEntry);
+				continue;
+			}
 
-				DirEntry info;
+			string hash = getFileHash(filePath);
+			
+			if (!!sicmp(hash, m.checksum))
+			{
+				auto newEntry = new ManifestEntry(m.filePath, info.size, hash);
+				result ~= new ManifestDiff(ManifestState.changed, m, newEntry);
+				continue;
+			}
 
-				try
-				{
-					info = getFileInfo(filePath);
-				}
-				catch (FileException)
-				{
-					result ~= new ManifestDiff(ManifestState.removed, m, null);
-					continue;
-				}
-
-				if (info.size != m.fileSize)
-				{
-					// this null checksum should raise red flags and e.g force a copy on
-					// manifest application
-					auto newEntry = new ManifestEntry(m.filePath, info.size, null);
-					result ~= new ManifestDiff(ManifestState.changed, m, newEntry);
-					continue;
-				}
-
-				string hash = getFileHash(filePath);
-				
-				if (!!sicmp(hash, m.checksum))
-				{
-					auto newEntry = new ManifestEntry(m.filePath, info.size, hash);
-					result ~= new ManifestDiff(ManifestState.changed, m, newEntry);
-					continue;
-				}
-
-				result ~= new ManifestDiff(ManifestState.unchanged, m, m);
-			//}
-			//finally
-			//{
-				//args = new FileHashEventArgs(m.filePath, index, manifest.length);
-				//OnFileHashEnd(args);
-			//}
-
-			//if (args.Cancel)
-			//{
-			//	return null;
-			//}
+			result ~= new ManifestDiff(ManifestState.unchanged, m, m);
 		}
 
 		return result;
@@ -395,32 +346,6 @@ public class ManifestGenerator
 		hash = sha.finish();
 		return toHexString!(LetterCase.lower)(hash).idup;
 	}
-
-/*
-	private void OnFilesIndexed(FilesIndexedEventArgs e)
-	{
-		if (FilesIndexed !is null)
-		{
-			FilesIndexed.Invoke(this, e);
-		}
-	}
-
-	private void OnFileHashStart(FileHashEventArgs e)
-	{
-		if (FileHashStart !is null)
-		{
-			FileHashStart.Invoke(this, e);
-		}
-	}
-
-	private void OnFileHashEnd(FileHashEventArgs e)
-	{
-		if (FileHashEnd !is null)
-		{
-			FileHashEnd.Invoke(this, e);
-		}
-	}
-*/
 }
 
 public static class Manifest
@@ -481,11 +406,13 @@ public class ManifestEntry
 	 * The name/path of the file relative to the root of the mod directory.
 	 */
 	public string filePath;
+
 	/**
 	 * \brief 
 	 * The size of the file in bytes.
 	 */
 	public const long fileSize;
+
 	/**
 	 * \brief 
 	 * String representation of the SHA-256 checksum of the file.
