@@ -189,7 +189,7 @@ public class ManifestGenerator
 
 	/**
 	 * \brief 
-	 * Generates a diff of two mod manifests.
+	 * Generates a diff of two manifests.
 	 * \param newManifest The new manifest.
 	 * \param oldManifest The old manifest.
 	 * \return A list of \sa ManifestDiff containing change information.
@@ -268,7 +268,7 @@ public class ManifestGenerator
 
 	/**
 	 * \brief 
-	 * Verifies the integrity of a mod against a mod manifest.
+	 * Verifies the integrity of a directory tree against a manifest.
 	 * \param dirPath Path to the directory containing the files to verify.
 	 * \param manifest Manifest to check against.
 	 * \return A list of \sa ManifestDiff containing change information.
@@ -352,8 +352,8 @@ public static class Manifest
 {
 	/**
 	 * \brief 
-	 * Produces a mod manifest from a file.
-	 * \param filePath The path to the mod manifest file.
+	 * Produces a manifest from a file.
+	 * \param filePath The path to the manifest file.
 	 * \return List of \sa ManifestEntry
 	 */
 	public static ManifestEntry[] fromFile(string filePath)
@@ -364,8 +364,8 @@ public static class Manifest
 
 	/**
 	 * \brief 
-	 * Parses a mod manifest file in string form and produces a mod manifest.
-	 * \param str The mod manifest file string to parse.
+	 * Parses a manifest file in string form and produces a manifest.
+	 * \param str The manifest file string to parse.
 	 * \return List of \sa ManifestEntry
 	 */
 	public static ManifestEntry[] fromString(string str)
@@ -384,7 +384,7 @@ public static class Manifest
 
 	/**
 	 * \brief 
-	 * Writes a mod manifest to a file.
+	 * Writes a manifest to a file.
 	 * \param manifest The manifest to write.
 	 * \param filePath The file to write the manifest to.
 	 */
@@ -397,13 +397,13 @@ public static class Manifest
 
 /**
  * \brief 
- * An entry in a mod manifest describing a file's path, size, and checksum.
+ * An entry in a manifest describing a file's path, size, and checksum.
  */
 public class ManifestEntry
 {
 	/**
 	 * \brief 
-	 * The name/path of the file relative to the root of the mod directory.
+	 * The name/path of the file relative to the root of the directory.
 	 */
 	public string filePath;
 
@@ -423,7 +423,7 @@ public class ManifestEntry
 
 	/**
 	 * \brief 
-	 * Parses a line from a mod manifest line and constructs a \sa ManifestEntry .
+	 * Parses a line from a manifest line and constructs a \sa ManifestEntry .
 	 * \param line 
 	 * The line to parse.
 	 * Each field of the line must be separated by tab (\t) and contain 3 fields total.
