@@ -69,6 +69,8 @@ int main(string[] args)
 			defaultGetoptPrinter("Manifest generator.", result.options);
 
 			stdout.writeln();
+
+			// TODO: use metaprogramming to pull the descriptions from code
 			stdout.writeln("Operation modes:");
 			stdout.writeln(`	generate: Generate a manifest for a given target directory.`);
 			stdout.writeln(`	  verify: Verify file integrity of a directory according to its manifest.`);
@@ -160,7 +162,7 @@ const manifestFileName = ".manifest";
 void generateManifest(string sourcePath)
 {
 	auto generator = new ManifestGenerator();
-	auto manifest = generator.generate(sourcePath);
+	ManifestEntry[] manifest = generator.generate(sourcePath);
 	Manifest.toFile(manifest, buildNormalizedPath(sourcePath, manifestFileName));
 }
 
@@ -203,19 +205,19 @@ void printDiff(ManifestDiff[] diff)
 void verifyManifest(string sourcePath)
 {
 	auto generator = new ManifestGenerator();
-	auto manifest = Manifest.fromFile(buildNormalizedPath(sourcePath, manifestFileName));
-	auto diff = generator.verify(sourcePath, manifest);
+	ManifestEntry[] manifest = Manifest.fromFile(buildNormalizedPath(sourcePath, manifestFileName));
+	ManifestDiff[] diff = generator.verify(sourcePath, manifest);
 
 	printDiff(diff);
 }
 
 void compareManifests(string sourcePath, string targetPath)
 {
-	auto sourceManifest = Manifest.fromFile(buildNormalizedPath(sourcePath, manifestFileName));
-	auto targetManifest = Manifest.fromFile(buildNormalizedPath(targetPath, manifestFileName));
+	ManifestEntry[] sourceManifest = Manifest.fromFile(buildNormalizedPath(sourcePath, manifestFileName));
+	ManifestEntry[] targetManifest = Manifest.fromFile(buildNormalizedPath(targetPath, manifestFileName));
 
 	auto generator = new ManifestGenerator();
-	auto diff = generator.diff(sourceManifest, targetManifest);
+	ManifestDiff[] diff = generator.diff(sourceManifest, targetManifest);
 
 	printDiff(diff);
 }
@@ -223,7 +225,7 @@ void compareManifests(string sourcePath, string targetPath)
 void applyManifest(string sourcePath, ManifestEntry[] sourceManifest, string targetPath, ManifestEntry[] targetManifest)
 {
 	auto generator = new ManifestGenerator();
-	auto diff = generator.diff(sourceManifest, targetManifest);
+	ManifestDiff[] diff = generator.diff(sourceManifest, targetManifest);
 
 	stderr.writeln("diff:");
 	printDiff(diff);
@@ -294,48 +296,48 @@ void applyManifest(string sourcePath, ManifestEntry[] sourceManifest, string tar
 
 	bool[string] sourceSet, targetSet;
 
-	auto sourcePaths = sourceManifest.map!(x => to!string(dirName(x.filePath).asNormalizedPath));
-	sourcePaths.each!(x => sourceSet[x] = true);
+	// add source paths to sourceSet
+	sourceManifest.map!(x => to!string(dirName(x.filePath).asNormalizedPath))
+	              .each!(x => sourceSet[x] = true);
 
-	auto targetPaths = targetManifest.map!(x => to!string(dirName(x.filePath).asNormalizedPath));
-	targetPaths.each!(x => targetSet[x] = true);
+	// add target paths to targetSet
+	targetManifest.map!(x => to!string(dirName(x.filePath).asNormalizedPath))
+	              .each!(x => targetSet[x] = true);
 
-	auto uniqueTargetPaths = targetSet.byKey
-	                                  .array
-	                                  .sort!((a, b) => a.count(dirSeparator) > b.count(dirSeparator));
+	// get all target paths, and sort by deepest to most shallow so directories can be safely removed
+	string[] uniqueTargetPaths = targetSet.byKey.array; // @suppress(dscanner.suspicious.unmodified) (it's modified using sort below!)
+	uniqueTargetPaths.sort!((a, b) => a.count(dirSeparator) > b.count(dirSeparator));
 
-	// grab all dirs unique to the old manifest
+	// get all directories which are unique to the old manifest and which exist on the filesystem
 	auto oldDirs = uniqueTargetPaths.filter!(x => (x in sourceSet) is null)
 	                                .map!(x => buildNormalizedPath(targetPath, x))
 	                                .filter!(x => x.exists);
 
-	// TODO: remove empty parent directories too
-
 	// check each of them for any files
+	// TODO: remove empty parent directories too
 	foreach (dir; oldDirs)
 	{
 		size_t dirEntryCount;
-		auto entries = dirEntries(dir, SpanMode.shallow);
+		DirIterator entries = dirEntries(dir, SpanMode.shallow);
 
+		// count entries in the directory, ignoring exceptions (hence manual iteration)
 		while (!entries.empty)
 		{
 			try
 			{
 				const entry = entries.front;
-				++dirEntryCount;
 			}
 			catch (Exception ex)
 			{
-				// ok well I mean it's not empty then, and we can only assume it "exists",
-				// even if it's e.g. a broken symlink
-				++dirEntryCount;
+				// ok well I mean it's not empty then, and we can only assume it
+				// "exists", even if it's e.g. a broken symlink
 			}
 
+			++dirEntryCount;
 			entries.popFront();
 		}
 
-		// the folder doesn't have any files in it,
-		// so just remove it.
+		// the folder doesn't have any files in it, so just remove it.
 		if (!dirEntryCount)
 		{
 			rmdir(dir);
@@ -354,8 +356,8 @@ void applyManifest(string sourcePath, string targetPath)
 	enforce(exists(sourceManifestPath), "Source directory is missing its manifest!");
 	enforce(exists(targetManifestPath), "Target directory is missing its manifest!");
 
-	auto sourceManifest = Manifest.fromFile(sourceManifestPath);
-	auto targetManifest = Manifest.fromFile(targetManifestPath);
+	ManifestEntry[] sourceManifest = Manifest.fromFile(sourceManifestPath);
+	ManifestEntry[] targetManifest = Manifest.fromFile(targetManifestPath);
 
 	applyManifest(sourcePath, sourceManifest, targetPath, targetManifest);
 }
@@ -366,14 +368,13 @@ void repairManifest(string sourcePath, string targetPath)
 
 	ManifestEntry[] sourceManifest = Manifest.fromFile(sourcePath.buildNormalizedPath(manifestFileName));
 
-	auto targetManifestPath = targetPath.buildNormalizedPath(manifestFileName);
+	string targetManifestPath = targetPath.buildNormalizedPath(manifestFileName);
 
-	// if a target manifest already exists
+	// if a target manifest already exists...
 	if (exists(targetManifestPath))
 	{
+		// first, read the existing manifest and perform a normal update
 		ManifestEntry[] targetManifest = Manifest.fromFile(targetManifestPath);
-
-		// first, perform a normal update
 		applyManifest(sourcePath, sourceManifest, targetPath, targetManifest);
 
 		stderr.writeln();
@@ -381,13 +382,13 @@ void repairManifest(string sourcePath, string targetPath)
 		stderr.writeln();
 
 		// now verify against the source manifest which whill match the target manifest
-		auto diff = generator.verify(targetPath, sourceManifest);
+		ManifestDiff[] diff = generator.verify(targetPath, sourceManifest);
 		applyManifest(sourcePath, sourceManifest, targetPath, Manifest.fromDiff(diff));
 
 		return;
 	}
 
-	auto diff = generator.verify(targetPath, sourceManifest);
+	ManifestDiff[] diff = generator.verify(targetPath, sourceManifest);
 
 	printDiff(diff);
 
@@ -400,7 +401,7 @@ void repairManifest(string sourcePath, string targetPath)
 	stderr.writeln("repairing...");
 	stderr.writeln();
 
-	auto fakeManifest = Manifest.fromDiff(diff);
+	ManifestEntry[] fakeManifest = Manifest.fromDiff(diff);
 
 	applyManifest(sourcePath, sourceManifest, targetPath, fakeManifest);
 }
@@ -416,6 +417,6 @@ void deployManifest(string sourcePath, string targetPath)
 		mkdirRecurse(targetPath);
 	}
 
-	auto sourceManifest = Manifest.fromFile(sourceManifestPath);
+	ManifestEntry[] sourceManifest = Manifest.fromFile(sourceManifestPath);
 	applyManifest(sourcePath, sourceManifest, targetPath, null);
 }
