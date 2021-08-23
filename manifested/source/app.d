@@ -10,8 +10,9 @@ import std.string;
 
 import manifested;
 
-// TODO: clean - remove unversioned files
+// TODO: output progress
 
+// TODO: Operation.clean - remove unversioned files (which includes ignore file implementation)
 /// Manifest operations to perform.
 enum Operation
 {
@@ -174,7 +175,9 @@ void printDiff(ManifestDiff[] diff)
 		{
 			// impossible, but `final switch`
 			case ManifestState.unchanged:
-				continue;
+				assert(false, `Encountered entry state "`
+				              ~ to!string(entry.state)
+				              ~ `", which should be impossible in this function.`);
 
 			case ManifestState.added:
 			case ManifestState.changed:
@@ -232,7 +235,9 @@ void applyManifest(string sourcePath, ManifestEntry[] sourceManifest, string tar
 		{
 			// impossible, but `final switch`
 			case ManifestState.unchanged:
-				continue;
+				assert(false, `Encountered entry state "`
+				              ~ to!string(entry.state)
+				              ~ `", which should be impossible in this function.`);
 
 			case ManifestState.added:
 			case ManifestState.changed:
