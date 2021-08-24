@@ -1,7 +1,7 @@
 module manifested.manifest;
 
 import std.algorithm;
-import std.array : array, empty;
+import std.array : Appender, array, empty;
 import std.exception;
 import std.file;
 import std.path;
@@ -26,65 +26,55 @@ private auto firstOrDefault(alias pred, R)(R r) if (isInputRange!R)
 }
 
 /**
- * \brief 
- * Represents the difference between two \sa ManifestEntrys.
+ * \brief Represents the difference between two \sa ManifestEntry instances.
  */
 public enum ManifestState
 {
 	/**
-	 * \brief 
-	 * The file is unchanged.
+	 * \brief The file is unchanged.
 	 */
 	unchanged,
 
 	/**
-	 * \brief 
-	 * Indicates that a file has been moved, renamed, or both.
+	 * \brief Indicates that a file has been moved, renamed, or both.
 	 */
 	moved,
 
 	/**
-	 * \brief 
-	 * The file has been modified in some way.
+	 * \brief The file has been modified in some way.
 	 */
 	changed,
 
 	/**
-	 * \brief 
-	 * The file has been added to the new manifest.
+	 * \brief The file has been added to the new manifest.
 	 */
 	added,
 
 	/**
-	 * \brief 
-	 * The file has been removed from the new manifest.
+	 * \brief The file has been removed from the new manifest.
 	 */
 	removed
 }
 
 /**
- * \brief 
- * Holds two instances of \sa ManifestEntry and their differences.
+ * \brief Holds two instances of \sa ManifestEntry and their differences.
  * \sa ManifestState
  */
 public class ManifestDiff
 {
 	/**
-	 * \brief 
-	 * The state of the file.
+	 * \brief The state of the file.
 	 * \sa ManifestState
 	 */
 	public ManifestState state;
 
 	/**
-	 * \brief 
-	 * The older of the two entries.
+	 * \brief The older of the two entries.
 	 */
 	public ManifestEntry last;
 
 	/**
-	 * \brief 
-	 * The newer of the two entries.
+	 * \brief The newer of the two entries.
 	 */
 	public ManifestEntry current;
 
@@ -96,9 +86,11 @@ public class ManifestDiff
 	}
 }
 
+/// An exception which is thrown when a provided directory could not be found.
 public class DirectoryNotFoundException : Exception
 {
 public:
+	/// The directory path which wasn't found.
 	const string path;
 
 	this(string directory)
@@ -108,11 +100,11 @@ public:
 	}
 }
 
+/// Class for generating, verifying, and comparing manifests.
 public class ManifestGenerator
 {
 	/**
-	 * \brief 
-	 * Generates a manifest for a given directory hierarchy.
+	 * \brief Generates a manifest for a given directory hierarchy.
 	 * \param dirPath The path to the directory.
 	 * \return An array of \sa ManifestEntry.
 	 */
@@ -123,8 +115,6 @@ public class ManifestGenerator
 			throw new DirectoryNotFoundException(dirPath);
 		}
 
-		ManifestEntry[] result;
-
 		// TODO: don't hard-code ".manifest"
 		string[] fileIndex = dirEntries(dirPath, SpanMode.breadth)
 		                     .filter!(x => !x.empty && x.isFile &&
@@ -134,10 +124,12 @@ public class ManifestGenerator
 
 		if (fileIndex.empty)
 		{
-			return result;
+			return [];
 		}
 
-		dirPath = dirPath.asNormalizedPath.array;
+		Appender!(ManifestEntry[]) result;
+		result.reserve(fileIndex.length);
+		dirPath = dirPath.asNormalizedPath.array; // .array gives a string back
 
 		foreach (string f; fileIndex)
 		{
@@ -149,12 +141,11 @@ public class ManifestGenerator
 			result ~= new ManifestEntry(relative, file.size, hash);
 		}
 
-		return result;
+		return result[];
 	}
 
 	/**
-	 * \brief 
-	 * Follows symbolic links and constructs a \sa DirEntry of the actual file.
+	 * \brief Follows symbolic links and constructs a \sa DirEntry of the actual file.
 	 * \param path Path to the file.
 	 * \return The  of the real file.
 	 */
@@ -188,8 +179,7 @@ public class ManifestGenerator
 	}
 
 	/**
-	 * \brief 
-	 * Generates a diff of two manifests.
+	 * \brief Generates a diff of two manifests.
 	 * \param newManifest The new manifest.
 	 * \param oldManifest The old manifest.
 	 * \return A list of \sa ManifestDiff containing change information.
@@ -198,8 +188,8 @@ public class ManifestGenerator
 	{
 		// TODO: handle copies instead of moves to reduce download requirements (or cache downloads by hash?)
 
-		ManifestDiff[] result;
-		ManifestEntry[] old;
+		Appender!(ManifestDiff[]) result;
+		ManifestEntry[] old; // TODO: use set (AA)
 
 		if (oldManifest !is null && oldManifest.length > 0)
 		{
@@ -209,16 +199,17 @@ public class ManifestGenerator
 		foreach (ManifestEntry newEntry; newManifest)
 		{
 			// First, check for an exact match. File path/name, hash, size; everything.
-			const exact = old.firstOrDefault!(x => x == newEntry);
+			const exact = old.firstOrDefault!(x => x == newEntry); // TODO: use set (AA)
 
 			if (exact !is null)
 			{
-				old = old.remove!(x => x is exact);
+				old = old.remove!(x => x is exact); // TODO: use set (AA)
 				result ~= new ManifestDiff(ManifestState.unchanged, newEntry, newEntry);
 				continue;
 			}
 
 			// There's no exact match, so let's search by checksum.
+			// (.array is used because all checksum matches are iterated below.)
 			ManifestEntry[] checksumMatches = old.filter!(x => !sicmp(x.checksum, newEntry.checksum)).array;
 
 			// If we've found matching checksums, we then need to check
@@ -226,15 +217,16 @@ public class ManifestGenerator
 			if (checksumMatches.length > 0)
 			{
 				auto first = checksumMatches[0];
-				old = old.remove!(x => x is first);
+				old = old.remove!(x => x is first); // TODO: use set (AA)
 
 				if (checksumMatches.all!(x => x.filePath != newEntry.filePath))
 				{
+					// TODO: produce lookup by name for speed
 					const tbd = old.firstOrDefault!(x => x.filePath == newEntry.filePath);
 
 					if (tbd !is null)
 					{
-						old = old.remove!(x => x is tbd);
+						old = old.remove!(x => x is tbd); // TODO: use set (AA)
 					}
 
 					result ~= new ManifestDiff(ManifestState.moved, first, newEntry);
@@ -244,11 +236,12 @@ public class ManifestGenerator
 
 			// If we've made it here, there's no matching checksums, so let's search
 			// for matching paths. If a path matches, the file has been modified.
+			// TODO: produce lookup by name for speed
 			ManifestEntry nameMatch = old.firstOrDefault!(x => x.filePath == newEntry.filePath);
 
 			if (nameMatch !is null)
 			{
-				old = old.remove!(x => x is nameMatch);
+				old = old.remove!(x => x is nameMatch); // TODO: use set (AA)
 				result ~= new ManifestDiff(ManifestState.changed, nameMatch, newEntry);
 				continue;
 			}
@@ -260,22 +253,22 @@ public class ManifestGenerator
 		// All files that are still unique to the old manifest should be marked for removal.
 		if (old.length > 0)
 		{
-			result ~= old.map!(x => new ManifestDiff(ManifestState.removed, x, null)).array;
+			result ~= old.map!(x => new ManifestDiff(ManifestState.removed, x, null));
 		}
 
-		return result;
+		result.shrinkTo(result[].length);
+		return result[];
 	}
 
 	/**
-	 * \brief 
-	 * Verifies the integrity of a directory tree against a manifest.
+	 * \brief Verifies the integrity of a directory tree against a manifest.
 	 * \param dirPath Path to the directory containing the files to verify.
 	 * \param manifest Manifest to check against.
 	 * \return A list of \sa ManifestDiff containing change information.
 	 */
 	public ManifestDiff[] verify(string dirPath, ManifestEntry[] manifest)
 	{
-		ManifestDiff[] result;
+		Appender!(ManifestDiff[]) result;
 
 		foreach (ManifestEntry m; manifest)
 		{
@@ -310,7 +303,7 @@ public class ManifestGenerator
 
 			string hash = getFileHash(filePath);
 			
-			if (!!sicmp(hash, m.checksum))
+			if (sicmp(hash, m.checksum) != 0)
 			{
 				auto newEntry = new ManifestEntry(m.filePath, info.size, hash);
 				result ~= new ManifestDiff(ManifestState.changed, m, newEntry);
@@ -320,25 +313,30 @@ public class ManifestGenerator
 			result ~= new ManifestDiff(ManifestState.unchanged, m, m);
 		}
 
-		return result;
+		result.shrinkTo(result[].length);
+		return result[];
 	}
 
 	/**
-	 * \brief 
-	 * Computes a SHA-256 hash of a given file
-	 * \param filePath Path to the file to hash.
-	 * \return Lowercase string representation of the hash.
+		Computes a SHA-256 hash of a given file.
+
+		Params:
+			filePath  = Path to the file to hash.
+			chunkSize = The size of each chunk read from the file.
+		
+		Returns:
+			Lowercase string representation of the hash.
 	 */
-	public static string getFileHash(string filePath)
+	private static string getFileHash(string filePath, size_t chunkSize = 32 * 1024)
 	{
-		import std.digest.sha;
+		import std.digest.sha : SHA256, toHexString, LetterCase;
 
 		ubyte[32] hash;
 		SHA256 sha;
 
 		auto f = File(filePath, "rb");
 
-		foreach (chunk; f.byChunk(32*1024))
+		foreach (chunk; f.byChunk(chunkSize))
 		{
 			sha.put(chunk);
 		}
@@ -348,90 +346,78 @@ public class ManifestGenerator
 	}
 }
 
+/// Class for parsing and writing manifest files.
 public static class Manifest
 {
 	/**
-	 * \brief 
-	 * Produces a manifest from a file.
+	 * \brief Produces a manifest from a file.
 	 * \param filePath The path to the manifest file.
 	 * \return List of \sa ManifestEntry
 	 */
 	public static ManifestEntry[] fromFile(string filePath)
 	{
+		// TODO: just return a range
 		string[] lines = readText(filePath).splitLines();
 		return lines.map!(line => new ManifestEntry(line)).array;
 	}
 
 	/**
-	 * \brief 
-	 * Parses a manifest file in string form and produces a manifest.
+	 * \brief Parses a manifest file in string form and produces a manifest.
 	 * \param str The manifest file string to parse.
 	 * \return List of \sa ManifestEntry
 	 */
 	public static ManifestEntry[] fromString(string str)
 	{
+		// TODO: just return a range
 		string[] lines = str.splitLines();
 		return lines.map!(line => new ManifestEntry(line)).array;
 	}
 
 	/// Given a diff, produces a manifest of the non-removed entries.
+	// TODO: use range instead of array
 	public static ManifestEntry[] fromDiff(ManifestDiff[] diff)
 	{
+		// TODO: just return a range
 		return diff.filter!(x => x.state != ManifestState.removed)
 		           .map!(x => x.current)
 		           .array;
 	}
 
 	/**
-	 * \brief 
-	 * Writes a manifest to a file.
+	 * \brief Writes a manifest to a file.
 	 * \param manifest The manifest to write.
 	 * \param filePath The file to write the manifest to.
 	 */
-	public static void toFile(R)(R manifest, string filePath)
-		if (isForwardRange!R && is(ElementType!R == ManifestEntry))
+	public static void toFile(R)(R manifest, string filePath) if (isForwardRange!R && is(ElementType!R == ManifestEntry))
 	{
 		std.file.write(filePath, join(manifest.map!(x => x.toString()), "\n"));
 	}
 }
 
-/**
- * \brief 
- * An entry in a manifest describing a file's path, size, and checksum.
- */
+/// An entry in a manifest describing a file's path, size, and checksum.
 public class ManifestEntry
 {
-	/**
-	 * \brief 
-	 * The name/path of the file relative to the root of the directory.
-	 */
+	/// The name/path of the file relative to the root of the directory.
 	public string filePath;
 
-	/**
-	 * \brief 
-	 * The size of the file in bytes.
-	 */
+	/// The size of the file in bytes.
 	public const long fileSize;
 
-	/**
-	 * \brief 
-	 * String representation of the SHA-256 checksum of the file.
-	 */
-	public const string checksum;
+	/// String representation of the SHA-256 checksum of the file.
+	public const string checksum; // TODO: change to ubyte[]
 
+	/// Directory separator used in manifests. This remains constant on all platforms.
 	public static const string pathSeparator = "/";
 
 	/**
-	 * \brief 
-	 * Parses a line from a manifest line and constructs a \sa ManifestEntry .
-	 * \param line 
-	 * The line to parse.
+	 * \brief Parses a line from a manifest and constructs a \sa ManifestEntry .
+	 * \param line The line to parse.
 	 * Each field of the line must be separated by tab (\t) and contain 3 fields total.
 	 * Expected format is: [name]\t[size]\t[checksum]
 	 */
 	public this(string line)
 	{
-		string[] fields = line.splitter('\t').map!(x => x.strip()).array;
+		string[] fields = line.splitter('\t').map!(strip).array;
 
 		import std.conv : to;
 		enforce(fields.length == 3, "Manifest line must have 3 fields. Provided: " ~ to!string(fields.length));
@@ -443,6 +429,14 @@ public class ManifestEntry
 		validateFilePath();
 	}
 
+	/**
+		Construct a pre-parsed manifest entry.
+
+		Params:
+			filePath = The name/path of the file relative to the root of the directory.
+			fileSize = The size of the file in bytes.
+			checksum = String representation of the SHA-256 checksum of the file.
+	*/
 	public this(string filePath, long fileSize, string checksum)
 	{
 		this.filePath = filePath;
@@ -489,11 +483,11 @@ public class ManifestEntry
 		       !sicmp(checksum, m.checksum);
 	}
 
-	public override size_t toHash() const
+	public override size_t toHash() const @safe @nogc
 	{
 		size_t hashCode = hashOf(filePath);
-		hashCode = fileSize.hashOf(hashCode);
-		hashCode = checksum.hashOf(hashCode);
+		hashCode = hashOf(fileSize, hashCode);
+		hashCode = hashOf(checksum, hashCode);
 		return hashCode;
 	}
 }

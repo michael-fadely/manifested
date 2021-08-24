@@ -8,6 +8,7 @@ import std.conv : to;
 import std.exception;
 import std.traits : ReturnType;
 
+/// A Windows-specific exception with error code returned from `GetLastError()`
 public class Win32Exception : Exception
 {
 public:
