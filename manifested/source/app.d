@@ -294,28 +294,11 @@ void applyManifest(string sourcePath, ManifestEntry[] sourceManifest, string tar
 		}
 	}
 
-	bool[string] sourceSet, targetSet;
+	// remove all directories unique to the old manifest
+	string[] oldDirs = Manifest.getOldDirectories(targetManifest, sourceManifest);
 
-	// add source paths to sourceSet
-	sourceManifest.map!(x => to!string(dirName(x.filePath).asNormalizedPath))
-	              .each!(x => sourceSet[x] = true);
-
-	// add target paths to targetSet
-	targetManifest.map!(x => to!string(dirName(x.filePath).asNormalizedPath))
-	              .each!(x => targetSet[x] = true);
-
-	// get all target paths, and sort by deepest to most shallow so directories can be safely removed
-	string[] uniqueTargetPaths = targetSet.byKey.array; // @suppress(dscanner.suspicious.unmodified) (it's modified using sort below!)
-	uniqueTargetPaths.sort!((a, b) => a.count(dirSeparator) > b.count(dirSeparator));
-
-	// get all directories which are unique to the old manifest and which exist on the filesystem
-	auto oldDirs = uniqueTargetPaths.filter!(x => (x in sourceSet) is null)
-	                                .map!(x => buildNormalizedPath(targetPath, x))
-	                                .filter!(x => x.exists);
-
-	// check each of them for any files
-	// TODO: remove empty parent directories too
-	foreach (dir; oldDirs)
+	foreach (dir; oldDirs.map!(s => buildNormalizedPath(targetPath, s))
+	                     .filter!(s => exists(s)))
 	{
 		size_t dirEntryCount;
 		DirIterator entries = dirEntries(dir, SpanMode.shallow);

@@ -2,6 +2,7 @@ module manifested.manifest;
 
 import std.algorithm;
 import std.array : Appender, array, empty;
+import std.conv;
 import std.exception;
 import std.file;
 import std.path;
@@ -392,6 +393,54 @@ public static class Manifest
 	{
 		std.file.write(filePath, join(manifest.map!(x => x.toString()), "\n"));
 	}
+
+	// TODO: use range instead of array
+	/**
+		Get all distinct directories from an old manifest which no longer exist in a new manifest.
+
+		Params:
+			oldManifest = The old manifest.
+			newManifest = The new manifest.
+
+		Returns:
+			All distinct directories exclusive to `oldManifest` in descending order
+			sorted by number of directory separators.
+	 */
+	public static string[] getOldDirectories(ManifestEntry[] oldManifest, ManifestEntry[] newManifest)
+	{
+		auto getDistinctPaths(ManifestEntry[] manifest)
+		{
+			bool[string] set;
+
+			foreach (ManifestEntry entry; manifest)
+			{
+				string path = to!string(dirName(entry.filePath).asNormalizedPath);
+				set[path] = true;
+			}
+
+			return set.keys.array;
+		}
+
+		bool[string] newDirectories;
+
+		foreach (string newPath; getDistinctPaths(newManifest))
+		{
+			string path = newPath;
+
+			do
+			{
+				newDirectories[path] = true;
+				path = dirName(path);
+			} while (path.length && path != ".");
+		}
+
+		string[] result = getDistinctPaths(oldManifest).filter!(s => (s in newDirectories) is null)
+		                                               .array;
+
+		result.sort!((a, b) => a.count(dirSeparator) > b.count(dirSeparator));
+
+		return result;
+	}
 }
 
 /// An entry in a manifest describing a file's path, size, and checksum.
@@ -419,7 +468,6 @@ public class ManifestEntry
 	{
 		string[] fields = line.splitter('\t').map!(strip).array;
 
-		import std.conv : to;
 		enforce(fields.length == 3, "Manifest line must have 3 fields. Provided: " ~ to!string(fields.length));
 
 		this.filePath = fields[0];
