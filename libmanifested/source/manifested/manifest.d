@@ -434,8 +434,22 @@ public static class Manifest
 			} while (path.length && path != ".");
 		}
 
-		string[] result = getDistinctPaths(oldManifest).filter!(s => (s in newDirectories) is null)
-		                                               .array;
+		bool[string] oldDirectories;
+
+		foreach (string oldPath; getDistinctPaths(oldManifest))
+		{
+			string path = oldPath;
+
+			do
+			{
+				oldDirectories[path] = true;
+				path = dirName(path);
+			} while (path.length && path != ".");
+		}
+
+		string[] result = oldDirectories.keys
+		                                .filter!(s => (s in newDirectories) is null)
+		                                .array;
 
 		result.sort!((a, b) => a.count(dirSeparator) > b.count(dirSeparator));
 
