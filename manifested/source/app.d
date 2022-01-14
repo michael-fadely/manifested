@@ -7,40 +7,103 @@ import std.getopt;
 import std.path;
 import std.stdio;
 import std.string;
+import std.traits;
 
 import manifested;
 
 // TODO: output progress
 
+struct Documentation
+{
+	string[] lines;
+
+	this(string[] inputLines ...)
+	{
+		lines = inputLines;
+	}
+}
+
 // TODO: Operation.clean - remove unversioned files (which includes ignore file implementation)
 /// Manifest operations to perform.
 enum Operation
 {
-	/// Invalid mode.
+	@Documentation("Invalid mode.")
 	none,
 
-	/// Generate a manifest for a given target directory.
+	@Documentation("Generate a manifest for a given target directory.")
 	generate,
 
-	/// Verify file integrity of a directory according to its manifest.
+	@Documentation("Verify file integrity of a directory according to its manifest.")
 	verify,
 
-	/// Compare two manifested directories.
+	@Documentation("Compare two manifested directories.")
 	compare,
 
-	/// Update target directory to match source directory's manifest.
+	@Documentation("Update target directory to match source directory's manifest.")
 	update,
 
-	/**
-	 * Combination of `verify` and `update`.
-	 * First performs `update` to pull changed files, then `verify`
-	 * to validate data. If any files fail the validation check,
-	 * `update` is run again to pull the latest files.
-	 */
+	@Documentation("Combination of `verify` and `update`.",
+	               "First performs `update` to pull changed files, then `verify`",
+	               "to validate data. If any files fail the validation check,",
+	               "`update` is run again to pull the latest files.")
 	repair,
 
-	/// Copies manifest and tracked files from the source to the target.
+	@Documentation("Copies manifest and tracked files from the source to the target.")
 	deploy
+}
+
+size_t getLongestName()
+{
+	size_t result = 0;
+
+	static foreach (member; EnumMembers!Operation)
+	{
+		static if (member !is Operation.none)
+		{
+			result = max(result, to!string(member).length);
+		}
+	}
+
+	return result;
+}
+
+void printOperationDocs()
+{
+	enum longestName = getLongestName();
+	enum multiLinePadding = replicate(" ", longestName + ": ".length);
+
+	static foreach (member; EnumMembers!Operation)
+	{
+		static if (member !is Operation.none)
+		{
+			{
+				enum string memberName = to!string(member);
+				enum string memberHeader = format!("%*s: ")(longestName, memberName);
+				stdout.write("\t", memberHeader);
+
+				enum docUDAs = getUDAs!(mixin(member), Documentation);
+
+				static if (!docUDAs.length || docUDAs[0].lines.empty)
+				{
+					stdout.writeln("n/a");
+				}
+				else
+				{
+					enum doc = docUDAs[0];
+
+					stdout.writeln(doc.lines[0]);
+
+					static if (!doc.lines.empty)
+					{
+						foreach (string line; doc.lines[1 .. $])
+						{
+							stdout.writeln("\t", multiLinePadding, line);
+						}
+					}
+				}
+			}
+		}
+	}
 }
 
 int main(string[] args)
@@ -66,21 +129,13 @@ int main(string[] args)
 
 		if (result.helpWanted)
 		{
-			defaultGetoptPrinter("Manifest generator.", result.options);
+			auto formattedOptions = appender!string;
+			defaultGetoptFormatter(formattedOptions, "Manifest generator.", result.options, "\t%*s %*s%*s%s\n");
 
-			stdout.writeln();
+			stdout.writeln(formattedOptions.data);
 
-			// TODO: use metaprogramming to pull the descriptions from code
 			stdout.writeln("Operation modes:");
-			stdout.writeln(`	generate: Generate a manifest for a given target directory.`);
-			stdout.writeln(`	  verify: Verify file integrity of a directory according to its manifest.`);
-			stdout.writeln(`	 compare: Compare two manifested directories.`);
-			stdout.writeln(`	  update: Update target directory to match source directory's manifest.`);
-			stdout.writeln(`	  repair: Combination of "verify" and "update".`);
-			stdout.writeln(`	          First performs "update" to pull changed files, then "verify"`);
-			stdout.writeln(`	          to validate data. If any files fail the validation check,`);
-			stdout.writeln(`	          "update" is run again to pull the latest files.`);
-
+			printOperationDocs();
 			return 0;
 		}
 	}
