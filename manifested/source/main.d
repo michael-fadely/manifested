@@ -115,6 +115,7 @@ int main(string[] args)
 	try
 	{
 		auto result = getopt(args,
+		                     std.getopt.config.required,
 		                     "m|mode",
 		                     "Operation to perform.",
 		                     &mode,
