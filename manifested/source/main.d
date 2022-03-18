@@ -93,7 +93,7 @@ void printOperationDocs()
 
 					stdout.writeln(doc.lines[0]);
 
-					static if (!doc.lines.empty)
+					static if (doc.lines.length > 1)
 					{
 						foreach (string line; doc.lines[1 .. $])
 						{
@@ -148,49 +148,53 @@ int main(string[] args)
 
 	try
 	{
+		// handle pre-conditions first
 		final switch (mode) with (Operation)
 		{
 			case none:
-				stderr.writeln("Invalid operation mode specified.");
-				return -2;
+				enforce(mode > none, "Invalid operation mode specified.");
+				break;
 
 			case generate:
-				enforce(!targetPath.empty, "Target directory must be specified to generate a manifest.");
+			case verify:
+				enforce(!targetPath.empty, "Target directory must be specified for operation mode " ~ to!string(mode));
+				break;
 
+			case compare:
+			case update:
+			case repair:
+			case deploy:
+				enforce(!sourcePath.empty && !targetPath.empty,
+				        "Source and target directories must both be specified for operation mode " ~ to!string(mode));
+				break;
+		}
+
+		final switch (mode) with (Operation)
+		{
+			case none:
+				assert(false);
+
+			case generate:
 				generateManifest(targetPath);
 				break;
 
 			case verify:
-				enforce(!targetPath.empty, "Target directory must be specified to verify a manifest.");
-
 				verifyManifest(targetPath);
 				break;
 
 			case compare:
-				enforce(!sourcePath.empty && !targetPath.empty,
-				        "Source and target directories must both be specified for operation mode " ~ to!string(mode));
-
 				compareManifests(sourcePath, targetPath);
 				break;
 
 			case update:
-				enforce(!sourcePath.empty && !targetPath.empty,
-				        "Source and target directories must both be specified for operation mode " ~ to!string(mode));
-
 				applyManifest(sourcePath, targetPath);
 				break;
 
 			case repair:
-				enforce(!sourcePath.empty && !targetPath.empty,
-				        "Source and target directories must both be specified for operation mode " ~ to!string(mode));
-
 				repairManifest(sourcePath, targetPath);
 				break;
 
 			case deploy:
-				enforce(!sourcePath.empty && !targetPath.empty,
-				        "Source and target directories must both be specified for operation mode " ~ to!string(mode));
-
 				deployManifest(sourcePath, targetPath);
 				break;
 		}
@@ -299,6 +303,7 @@ void applyManifest(string sourcePath, ManifestEntry[] sourceManifest, string tar
 
 			case ManifestState.added:
 			case ManifestState.changed:
+			{
 				stderr.writeln("applying: ", entry.state, `: "`, entry.current.filePath, `"`);
 
 				const sourceFile = buildNormalizedPath(sourcePath, entry.current.filePath);
@@ -313,8 +318,10 @@ void applyManifest(string sourcePath, ManifestEntry[] sourceManifest, string tar
 
 				copy(sourceFile, targetFile);
 				break;
+			}
 
 			case ManifestState.removed:
+			{
 				stderr.writeln("applying: ", entry.state, `: "`, entry.last.filePath, `"`);
 
 				const toRemove = buildNormalizedPath(targetPath, entry.last.filePath);
@@ -325,8 +332,10 @@ void applyManifest(string sourcePath, ManifestEntry[] sourceManifest, string tar
 				}
 
 				break;
+			}
 
 			case ManifestState.moved:
+			{
 				stderr.writeln("applying: ", entry.state, `: "`, entry.last.filePath, `" -> "`, entry.current.filePath, `"`);
 
 				const from = buildNormalizedPath(targetPath, entry.last.filePath);
@@ -347,6 +356,7 @@ void applyManifest(string sourcePath, ManifestEntry[] sourceManifest, string tar
 
 				rename(from, to);
 				break;
+			}
 		}
 	}
 

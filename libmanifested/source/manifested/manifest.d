@@ -106,18 +106,18 @@ public class ManifestGenerator
 {
 	/**
 	 * \brief Generates a manifest for a given directory hierarchy.
-	 * \param dirPath The path to the directory.
+	 * \param directoryPath The path to the directory.
 	 * \return An array of \sa ManifestEntry.
 	 */
-	public ManifestEntry[] generate(string dirPath)
+	public ManifestEntry[] generate(string directoryPath)
 	{
-		if (!exists(dirPath))
+		if (!exists(directoryPath))
 		{
-			throw new DirectoryNotFoundException(dirPath);
+			throw new DirectoryNotFoundException(directoryPath);
 		}
 
 		// TODO: don't hard-code ".manifest"
-		string[] fileIndex = dirEntries(dirPath, SpanMode.breadth)
+		string[] fileIndex = dirEntries(directoryPath, SpanMode.breadth)
 		                     .filter!(x => !x.empty && x.isFile &&
 		                              baseName(x) != ".manifest")
 		                     .map!(x => cast(string)x)
@@ -130,11 +130,11 @@ public class ManifestGenerator
 
 		Appender!(ManifestEntry[]) result;
 		result.reserve(fileIndex.length);
-		dirPath = dirPath.asNormalizedPath.array; // .array gives a string back
+		directoryPath = directoryPath.asNormalizedPath.array; // .array gives a string back
 
 		foreach (string f; fileIndex)
 		{
-			string relative = f[dirPath.length + 1 .. $];
+			string relative = f[directoryPath.length + 1 .. $];
 			DirEntry file = getFileInfo(f);
 
 			string hash = getFileHash(f);
@@ -147,19 +147,19 @@ public class ManifestGenerator
 
 	/**
 	 * \brief Follows symbolic links and constructs a \sa DirEntry of the actual file.
-	 * \param path Path to the file.
-	 * \return The  of the real file.
+	 * \param filePath Path to the file.
+	 * \return The real path to the file.
 	 */
-	private static DirEntry getFileInfo(string path)
+	private static DirEntry getFileInfo(string filePath)
 	{
-		auto file = DirEntry(path);
+		auto file = DirEntry(filePath);
 
 		if (!file.isSymlink)
 		{
 			return file;
 		}
 
-		string reparsed = readSymlink(path);
+		string reparsed = readSymlink(filePath);
 
 		if (reparsed.empty)
 		{
@@ -169,11 +169,11 @@ public class ManifestGenerator
 
 				if (GetLastError() == 2)
 				{
-					throw new FileException(path, "Symlinked file not found!");
+					throw new FileException(filePath, "Symlinked file not found!");
 				}
 			}
 
-			throw new FileException(path, "Failed to read symlink target.");
+			throw new FileException(filePath, "Failed to read symlink target.");
 		}
 
 		return DirEntry(reparsed);
@@ -263,21 +263,22 @@ public class ManifestGenerator
 
 	/**
 	 * \brief Verifies the integrity of a directory tree against a manifest.
-	 * \param dirPath Path to the directory containing the files to verify.
+	 * \param directoryPath Path to the directory containing the files to verify.
 	 * \param manifest Manifest to check against.
 	 * \return A list of \sa ManifestDiff containing change information.
 	 */
-	public ManifestDiff[] verify(string dirPath, ManifestEntry[] manifest)
+	public ManifestDiff[] verify(string directoryPath, ManifestEntry[] manifest)
 	{
 		Appender!(ManifestDiff[]) result;
+		result.reserve(manifest.length);
 
-		foreach (ManifestEntry m; manifest)
+		foreach (ManifestEntry entry; manifest)
 		{
-			string filePath = buildNormalizedPath(dirPath, m.filePath);
+			string filePath = buildNormalizedPath(directoryPath, entry.filePath);
 
 			if (!exists(filePath))
 			{
-				result ~= new ManifestDiff(ManifestState.removed, m, null);
+				result ~= new ManifestDiff(ManifestState.removed, entry, null);
 				continue;
 			}
 
@@ -289,29 +290,29 @@ public class ManifestGenerator
 			}
 			catch (FileException)
 			{
-				result ~= new ManifestDiff(ManifestState.removed, m, null);
+				result ~= new ManifestDiff(ManifestState.removed, entry, null);
 				continue;
 			}
 
-			if (info.size != m.fileSize)
+			if (info.size != entry.fileSize)
 			{
 				// this null checksum should raise red flags and e.g force a copy on
 				// manifest application
-				auto newEntry = new ManifestEntry(m.filePath, info.size, null);
-				result ~= new ManifestDiff(ManifestState.changed, m, newEntry);
+				auto newEntry = new ManifestEntry(entry.filePath, info.size, null);
+				result ~= new ManifestDiff(ManifestState.changed, entry, newEntry);
 				continue;
 			}
 
 			string hash = getFileHash(filePath);
-			
-			if (sicmp(hash, m.checksum) != 0)
+
+			if (sicmp(hash, entry.checksum) != 0)
 			{
-				auto newEntry = new ManifestEntry(m.filePath, info.size, hash);
-				result ~= new ManifestDiff(ManifestState.changed, m, newEntry);
+				auto newEntry = new ManifestEntry(entry.filePath, info.size, hash);
+				result ~= new ManifestDiff(ManifestState.changed, entry, newEntry);
 				continue;
 			}
 
-			result ~= new ManifestDiff(ManifestState.unchanged, m, m);
+			result ~= new ManifestDiff(ManifestState.unchanged, entry, entry);
 		}
 
 		result.shrinkTo(result[].length);
@@ -324,7 +325,7 @@ public class ManifestGenerator
 		Params:
 			filePath  = Path to the file to hash.
 			chunkSize = The size of each chunk read from the file.
-		
+
 		Returns:
 			Lowercase string representation of the hash.
 	 */
@@ -414,7 +415,7 @@ public static class Manifest
 
 			foreach (ManifestEntry entry; manifest)
 			{
-				string path = to!string(dirName(entry.filePath).asNormalizedPath);
+				string path = dirName(entry.filePath).asNormalizedPath.array;
 				set[path] = true;
 			}
 
@@ -460,6 +461,9 @@ public static class Manifest
 /// An entry in a manifest describing a file's path, size, and checksum.
 public class ManifestEntry
 {
+	/// Directory separator used in manifests. This remains constant on all platforms.
+	public static const string directorySeparator = "/";
+
 	/// The name/path of the file relative to the root of the directory.
 	public string filePath;
 
@@ -468,9 +472,6 @@ public class ManifestEntry
 
 	/// String representation of the SHA-256 checksum of the file.
 	public const string checksum; // TODO: change to ubyte[]
-
-	/// Directory separator used in manifests. This remains constant on all platforms.
-	public static const string pathSeparator = "/";
 
 	/**
 	 * \brief Parses a line from a manifest and constructs a \sa ManifestEntry .
@@ -484,7 +485,7 @@ public class ManifestEntry
 
 		enforce(fields.length == 3, "Manifest line must have 3 fields. Provided: " ~ to!string(fields.length));
 
-		this.filePath = fields[0];
+		this.filePath = replaceDirectorySeparators(fields[0]);
 		this.fileSize = to!long(fields[1]);
 		this.checksum = fields[2];
 
@@ -495,28 +496,52 @@ public class ManifestEntry
 		Construct a pre-parsed manifest entry.
 
 		Params:
-			filePath = The name/path of the file relative to the root of the directory.
+			filePath = The path of the file relative to the root of the directory.
 			fileSize = The size of the file in bytes.
 			checksum = String representation of the SHA-256 checksum of the file.
 	*/
 	public this(string filePath, long fileSize, string checksum)
 	{
-		this.filePath = filePath;
+		this.filePath = replaceDirectorySeparators(filePath);
 		this.fileSize = fileSize;
 		this.checksum = checksum;
 
 		validateFilePath();
 	}
 
+	/**
+		Replace platform-specific directory separators in a given path with
+		`ManifestEntry.directorySeparator`.
+
+		If the current platform's directory separator is the same as
+		`ManifestEntry.directorySeparator`, then the path is returned unchanged.
+
+		Params:
+			path = The file path to replace separators in.
+
+		Returns:
+			A copy of the path with directory separators replaced, or the
+			input path unchanged if no replacements occurred.
+	*/
+	public static string replaceDirectorySeparators(string path)
+	{
+		static if (dirSeparator != directorySeparator)
+		{
+			return path.replace(dirSeparator, directorySeparator);
+		}
+		else
+		{
+			return path;
+		}
+	}
+
 	private void validateFilePath()
 	{
-		static if (dirSeparator != pathSeparator)
-		{
-			filePath = filePath.replace(dirSeparator, pathSeparator);
-		}
+		enum beginParentTraversal = `..` ~ directorySeparator;
+		enum midParentTraversal   = directorySeparator ~ `..` ~ directorySeparator;
 
 		enforce(!isRooted(this.filePath), "Absolute paths are forbidden: " ~ this.filePath);
-		enforce(!this.filePath.canFind(`..` ~ pathSeparator) && !this.filePath.canFind(pathSeparator ~ `..` ~ pathSeparator),
+		enforce(!this.filePath.startsWith(beginParentTraversal) && !this.filePath.canFind(midParentTraversal),
 		        "Parent directory traversal is forbidden: " ~ this.filePath);
 	}
 
@@ -533,16 +558,16 @@ public class ManifestEntry
 			return true;
 		}
 
-		auto m = cast(ManifestEntry)obj;
+		auto other = cast(ManifestEntry)obj;
 
-		if (m is null)
+		if (other is null)
 		{
 			return false;
 		}
 
-		return fileSize == m.fileSize &&
-		       filePath == m.filePath &&
-		       !sicmp(checksum, m.checksum);
+		return fileSize == other.fileSize &&
+		       filePath == other.filePath &&
+		       !sicmp(checksum, other.checksum);
 	}
 
 	public override size_t toHash() const @safe @nogc
