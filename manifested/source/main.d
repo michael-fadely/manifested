@@ -152,7 +152,7 @@ int main(string[] args)
 		final switch (mode) with (Operation)
 		{
 			case none:
-				enforce(mode > none, "Invalid operation mode specified.");
+				enforce(mode != none, "Invalid operation mode specified.");
 				break;
 
 			case generate:
