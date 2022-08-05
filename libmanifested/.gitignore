@@ -15,3 +15,4 @@ libmanifested.sln
 *.o
 *.obj
 *.lst
+*.pdb
