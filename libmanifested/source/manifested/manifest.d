@@ -174,8 +174,6 @@ public class ManifestGenerator
 	 */
 	public static ManifestDiff[] diff(ManifestEntry[] newManifest, ManifestEntry[] oldManifest)
 	{
-		// TODO: handle copies instead of moves to reduce download requirements (or cache downloads by hash?)
-
 		Appender!(ManifestDiff[]) result;
 		bool[ManifestEntry] oldSet; // FIXME: bool[T] is the poor man's set
 		ManifestEntry[string] oldByName;
