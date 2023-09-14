@@ -1,30 +1,17 @@
 module manifested.manifest;
 
 import std.algorithm;
-import std.array : Appender, array, empty;
+import std.array;
 import std.conv;
 import std.exception;
 import std.file;
 import std.path;
 import std.range;
 import std.stdio;
-import std.string : replace, split, splitLines, strip;
+import std.string;
 import std.uni : sicmp;
 
 import symlinkd.symlink;
-
-/// Finds the first element in a range that matches `pred`, or returns `null`
-private auto firstOrDefault(alias pred, R)(R r) if (isInputRange!R)
-{
-	auto search = r.find!(pred)();
-
-	if (!search.empty)
-	{
-		return search.takeOne.front;
-	}
-
-	return null;
-}
 
 /**
  * \brief Represents the difference between two \sa ManifestEntry instances.
@@ -190,44 +177,78 @@ public class ManifestGenerator
 		// TODO: handle copies instead of moves to reduce download requirements (or cache downloads by hash?)
 
 		Appender!(ManifestDiff[]) result;
-		ManifestEntry[] old; // TODO: use set (AA)
+		bool[ManifestEntry] oldSet; // FIXME: bool[T] is the poor man's set
+		ManifestEntry[string] oldByName;
+		ManifestEntry[][string] oldByHash;
 
 		if (oldManifest !is null && oldManifest.length > 0)
 		{
-			old = oldManifest.dup;
+			foreach (oldEntry; oldManifest)
+			{
+				oldByName[oldEntry.filePath] = oldEntry;
+
+				oldByHash.update(oldEntry.checksum.toLower(),
+				                 () => [ oldEntry ],
+				                 (ref ManifestEntry[] arr) { arr ~= oldEntry; });
+
+				oldSet[oldEntry] = true;
+			}
+		}
+
+		bool removeMatchingOldEntry(ManifestEntry newEntry)
+		{
+			if (!oldSet.remove(newEntry))
+			{
+				return false;
+			}
+
+			oldByName.remove(newEntry.filePath);
+
+			const newEntryChecksum = newEntry.checksum.toLower();
+			ManifestEntry[]* byChecksum = newEntryChecksum in oldByHash;
+
+			if (byChecksum !is null)
+			{
+				// TODO: use set (AA)
+				*byChecksum = remove!(x => x == newEntry)(*byChecksum);
+				if (byChecksum.empty)
+				{
+					oldByHash.remove(newEntryChecksum);
+				}
+			}
+
+			return true;
 		}
 
 		foreach (ManifestEntry newEntry; newManifest)
 		{
 			// First, check for an exact match. File path/name, hash, size; everything.
-			const exact = old.firstOrDefault!(x => x == newEntry); // TODO: use set (AA)
-
-			if (exact !is null)
+			if (removeMatchingOldEntry(newEntry))
 			{
-				old = old.remove!(x => x is exact); // TODO: use set (AA)
 				result ~= new ManifestDiff(ManifestState.unchanged, newEntry, newEntry);
 				continue;
 			}
 
 			// There's no exact match, so let's search by checksum.
-			// (.array is used because all checksum matches are iterated below.)
-			ManifestEntry[] checksumMatches = old.filter!(x => !sicmp(x.checksum, newEntry.checksum)).array;
+			ManifestEntry[]* checksumMatchesPtr = newEntry.checksum.toLower() in oldByHash;
 
 			// If we've found matching checksums, we then need to check
 			// the file path to see if it's been moved.
-			if (checksumMatches.length > 0)
+			if (checksumMatchesPtr !is null && !checksumMatchesPtr.empty)
 			{
+				// The array pointed to will be modified or removed, so copy it.
+				auto checksumMatches = (*checksumMatchesPtr).dup;
+
 				auto first = checksumMatches[0];
-				old = old.remove!(x => x is first); // TODO: use set (AA)
+				removeMatchingOldEntry(first);
 
 				if (checksumMatches.all!(x => x.filePath != newEntry.filePath))
 				{
-					// TODO: produce lookup by name for speed
-					const tbd = old.firstOrDefault!(x => x.filePath == newEntry.filePath);
+					auto byName = newEntry.filePath in oldByName;
 
-					if (tbd !is null)
+					if (byName !is null)
 					{
-						old = old.remove!(x => x is tbd); // TODO: use set (AA)
+						removeMatchingOldEntry(*byName);
 					}
 
 					result ~= new ManifestDiff(ManifestState.moved, first, newEntry);
@@ -237,12 +258,12 @@ public class ManifestGenerator
 
 			// If we've made it here, there's no matching checksums, so let's search
 			// for matching paths. If a path matches, the file has been modified.
-			// TODO: produce lookup by name for speed
-			ManifestEntry nameMatch = old.firstOrDefault!(x => x.filePath == newEntry.filePath);
+			ManifestEntry* nameMatchPtr = newEntry.filePath in oldByName;
 
-			if (nameMatch !is null)
+			if (nameMatchPtr !is null)
 			{
-				old = old.remove!(x => x is nameMatch); // TODO: use set (AA)
+				ManifestEntry nameMatch = *nameMatchPtr;
+				removeMatchingOldEntry(nameMatch);
 				result ~= new ManifestDiff(ManifestState.changed, nameMatch, newEntry);
 				continue;
 			}
@@ -252,9 +273,9 @@ public class ManifestGenerator
 		}
 
 		// All files that are still unique to the old manifest should be marked for removal.
-		if (old.length > 0)
+		if (oldSet.length > 0)
 		{
-			result ~= old.map!(x => new ManifestDiff(ManifestState.removed, x, null));
+			result ~= oldSet.keys.map!(x => new ManifestDiff(ManifestState.removed, x, null));
 		}
 
 		result.shrinkTo(result[].length);
