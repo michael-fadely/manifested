@@ -176,14 +176,14 @@ public class ManifestGenerator
 	{
 		Appender!(ManifestDiff[]) result;
 		bool[ManifestEntry] oldSet; // FIXME: bool[T] is the poor man's set
-		ManifestEntry[string] oldByName;
+		ManifestEntry[string] oldByPath;
 		ManifestEntry[][string] oldByHash;
 
 		if (oldManifest !is null && oldManifest.length > 0)
 		{
 			foreach (oldEntry; oldManifest)
 			{
-				oldByName[oldEntry.filePath] = oldEntry;
+				oldByPath[oldEntry.filePath] = oldEntry;
 
 				oldByHash.update(oldEntry.checksum.toLower(),
 				                 () => [ oldEntry ],
@@ -200,7 +200,7 @@ public class ManifestGenerator
 				return false;
 			}
 
-			oldByName.remove(newEntry.filePath);
+			oldByPath.remove(newEntry.filePath);
 
 			const newEntryChecksum = newEntry.checksum.toLower();
 			ManifestEntry[]* byChecksum = newEntryChecksum in oldByHash;
@@ -242,11 +242,11 @@ public class ManifestGenerator
 
 				if (checksumMatches.all!(x => x.filePath != newEntry.filePath))
 				{
-					auto byName = newEntry.filePath in oldByName;
+					auto byPath = newEntry.filePath in oldByPath;
 
-					if (byName !is null)
+					if (byPath !is null)
 					{
-						removeMatchingOldEntry(*byName);
+						removeMatchingOldEntry(*byPath);
 					}
 
 					result ~= new ManifestDiff(ManifestState.moved, first, newEntry);
@@ -256,13 +256,13 @@ public class ManifestGenerator
 
 			// If we've made it here, there's no matching checksums, so let's search
 			// for matching paths. If a path matches, the file has been modified.
-			ManifestEntry* nameMatchPtr = newEntry.filePath in oldByName;
+			ManifestEntry* pathMatchPtr = newEntry.filePath in oldByPath;
 
-			if (nameMatchPtr !is null)
+			if (pathMatchPtr !is null)
 			{
-				ManifestEntry nameMatch = *nameMatchPtr;
-				removeMatchingOldEntry(nameMatch);
-				result ~= new ManifestDiff(ManifestState.changed, nameMatch, newEntry);
+				ManifestEntry pathMatch = *pathMatchPtr;
+				removeMatchingOldEntry(pathMatch);
+				result ~= new ManifestDiff(ManifestState.changed, pathMatch, newEntry);
 				continue;
 			}
 
@@ -471,6 +471,7 @@ public static class Manifest
 		                                .filter!(s => (s in newDirectories) is null)
 		                                .array;
 
+		// FIXME: counting directory separators every time is extremely wasteful
 		result.sort!((a, b) => a.count(dirSeparator) > b.count(dirSeparator));
 
 		return result;
