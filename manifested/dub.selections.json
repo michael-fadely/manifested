@@ -1,7 +1,0 @@
-{
-	"fileVersion": 1,
-	"versions": {
-		"libmanifested": {"path":"../libmanifested"},
-		"symlinkd": "1.0.2"
-	}
-}
